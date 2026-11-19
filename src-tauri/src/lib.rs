@@ -3,6 +3,7 @@ pub mod models;
 pub mod vault;
 pub mod pec;
 pub mod imap;
+pub mod pop3;
 pub mod state;
 pub mod commands;
 

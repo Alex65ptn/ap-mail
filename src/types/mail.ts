@@ -13,6 +13,9 @@ export interface WorkspaceManifest {
   smtp_server?: string;
   smtp_port?: number;
   smtp_username?: string;
+  incoming_protocol?: 'IMAP' | 'POP3';
+  pop3_server?: string;
+  pop3_port?: number;
 }
 
 export interface Folder {

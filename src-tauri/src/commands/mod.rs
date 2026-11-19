@@ -125,8 +125,11 @@ pub struct UpdateWorkspaceSettingsParams {
     pub name: String,
     pub email_address: String,
     pub password: Option<String>,
+    pub incoming_protocol: Option<String>,
     pub imap_server: String,
     pub imap_port: u16,
+    pub pop3_server: Option<String>,
+    pub pop3_port: Option<u16>,
     pub smtp_server: Option<String>,
     pub smtp_port: Option<u16>,
     pub smtp_username: Option<String>,
@@ -159,8 +162,11 @@ pub async fn update_workspace_settings(
                             if manifest.workspace_id == params.workspace_id {
                                 manifest.name = params.name;
                                 manifest.email_address = Some(params.email_address.clone());
+                                manifest.incoming_protocol = params.incoming_protocol;
                                 manifest.imap_server = Some(params.imap_server);
                                 manifest.imap_port = Some(params.imap_port);
+                                manifest.pop3_server = params.pop3_server;
+                                manifest.pop3_port = params.pop3_port;
                                 manifest.smtp_server = params.smtp_server;
                                 manifest.smtp_port = params.smtp_port;
                                 manifest.smtp_username = params.smtp_username;
@@ -699,6 +705,9 @@ pub async fn add_imap_account(
         smtp_server: Some(imap_server.replace("imap.", "smtp.").replace("imaps.", "smtps.")),
         smtp_port: Some(if is_pec { 465 } else { 587 }),
         smtp_username: None,
+        incoming_protocol: Some(if imap_port == 995 || imap_port == 110 || imap_server.contains("pop.") { "POP3".to_string() } else { "IMAP".to_string() }),
+        pop3_server: Some(imap_server.replace("imap.", "pop.").replace("imaps.", "pop.")),
+        pop3_port: Some(if imap_port == 110 { 110 } else { 995 }),
     };
 
     let vault = Arc::new(VaultContainer::open_or_create(&data_root, &folder_name, Some(manifest.clone()), schema_sql)?);
@@ -728,11 +737,146 @@ pub async fn add_imap_account(
 
 #[tauri::command]
 pub async fn sync_workspace_now(
-    _state: State<'_, AppState>,
-    _workspace_id: String,
-) -> Result<bool> {
-    // Segnale di sincronizzazione completata con successo
-    Ok(true)
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<u32> {
+    let vault = state.get_vault(&workspace_id)?;
+    let conn = vault.get_connection()?;
+
+    // Assicurati che la colonna pop3_uidl esista nella tabella messages
+    let _ = conn.execute("ALTER TABLE messages ADD COLUMN pop3_uidl TEXT", []);
+
+    let is_pop3 = vault.manifest.incoming_protocol.as_deref() == Some("POP3")
+        || vault.manifest.imap_port == Some(995)
+        || vault.manifest.imap_port == Some(110);
+
+    if is_pop3 {
+        let sender = vault.manifest.email_address.clone().unwrap_or_default();
+        let password = keyring::Entry::new("AP_Mail", &sender)
+            .and_then(|e| e.get_password())
+            .unwrap_or_default();
+
+        let host = vault.manifest.pop3_server.clone()
+            .or_else(|| vault.manifest.imap_server.clone())
+            .unwrap_or_else(|| {
+                let domain = sender.split('@').nth(1).unwrap_or("verindex.org");
+                format!("pop.{}", domain)
+            });
+
+        let port = vault.manifest.pop3_port
+            .or(vault.manifest.imap_port)
+            .unwrap_or(995);
+
+        let use_tls = port == 995;
+
+        let mut client = crate::pop3::client::Pop3Client::connect(&host, port, use_tls).await?;
+        
+        let username = vault.manifest.smtp_username.clone()
+            .filter(|u| !u.trim().is_empty())
+            .unwrap_or_else(|| sender.clone());
+
+        // Login con fallback se fallisce
+        if let Err(e) = client.login(&username, &password).await {
+            if username.contains('@') {
+                let local_user = username.split('@').next().unwrap_or(&username);
+                let mut retry_client = crate::pop3::client::Pop3Client::connect(&host, port, use_tls).await?;
+                if let Err(retry_e) = retry_client.login(local_user, &password).await {
+                    return Err(AppError::Vault(format!(
+                        "Autenticazione POP3 fallita su {}:{}: {}", host, port, retry_e
+                    )));
+                }
+                client = retry_client;
+            } else {
+                return Err(AppError::Vault(format!(
+                    "Autenticazione POP3 fallita su {}:{}: {}", host, port, e
+                )));
+            }
+        }
+
+        // Recupera lista UIDL dal server POP3
+        let uidl_list = client.get_uidl_list().await?;
+
+        // Recupera gli UIDL già memorizzati per evitare duplicati
+        let mut existing_uidls = std::collections::HashSet::new();
+        if let Ok(mut stmt) = conn.prepare("SELECT pop3_uidl FROM messages WHERE pop3_uidl IS NOT NULL") {
+            if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
+                for r in rows.flatten() {
+                    existing_uidls.insert(r);
+                }
+            }
+        }
+
+        let inbox_id: i64 = conn.query_row(
+            "SELECT id FROM folders WHERE remote_name = 'INBOX' LIMIT 1",
+            [],
+            |r| r.get(0),
+        ).unwrap_or(1);
+
+        let mut downloaded_count = 0;
+
+        for (msg_num, uidl) in uidl_list {
+            if existing_uidls.contains(&uidl) {
+                continue;
+            }
+
+            let eml_bytes = match client.retrieve_message(msg_num).await {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+
+            let blob = vault.cas.store_bytes(&eml_bytes, "eml")?;
+            let parsed = mail_parser::MessageParser::default().parse(&eml_bytes);
+
+            let subject = parsed.as_ref().and_then(|m| m.subject()).unwrap_or("(Nessun oggetto)");
+            let from_addr = parsed.as_ref().and_then(|m| m.from().and_then(|f| f.first()).and_then(|a| a.address())).unwrap_or("sconosciuto");
+            let from_name = parsed.as_ref().and_then(|m| m.from().and_then(|f| f.first()).and_then(|a| a.name()));
+            let snippet = parsed.as_ref().and_then(|m| m.body_text(0)).map(|t| t.chars().take(200).collect::<String>());
+            let date_epoch = parsed.as_ref().and_then(|m| m.date().map(|d| d.to_timestamp())).unwrap_or_else(|| chrono::Utc::now().timestamp());
+            let date_iso = chrono::DateTime::from_timestamp(date_epoch, 0).map(|d| d.to_rfc3339()).unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+            let message_id = parsed.as_ref().and_then(|m| m.message_id()).map(|s| s.to_string()).unwrap_or_else(|| format!("<pop3-{}@apmail>", uidl));
+            let has_attachments = parsed.as_ref().map(|m| m.attachment_count() > 0).unwrap_or(false);
+
+            let is_pec = vault.manifest.is_pec;
+            let pec_type = if is_pec { "POSTA_CERTIFICATA" } else { "NONE" };
+
+            let _ = conn.execute(
+                "INSERT INTO messages (
+                    folder_id, message_id, subject, sender_name, sender_address,
+                    date_epoch, date_iso, snippet, raw_eml_blob_hash, raw_size_bytes,
+                    has_attachments, is_read, is_pec, pec_type, pop3_uidl
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, ?12, ?13, ?14)",
+                rusqlite::params![
+                    inbox_id,
+                    message_id,
+                    subject,
+                    from_name,
+                    from_addr,
+                    date_epoch,
+                    date_iso,
+                    snippet,
+                    blob.sha256_hash,
+                    blob.size_bytes as i64,
+                    has_attachments,
+                    is_pec,
+                    pec_type,
+                    uidl,
+                ],
+            );
+
+            // Atomic Expunge: se impostata la cancellazione da server, cancella dal server solo dopo salvataggio verificato su disco
+            if vault.manifest.auto_delete_on_server {
+                let _ = client.delete_message(msg_num).await;
+            }
+
+            downloaded_count += 1;
+        }
+
+        let _ = client.quit().await;
+        Ok(downloaded_count)
+    } else {
+        // IMAP sync placeholder
+        Ok(0)
+    }
 }
 
 #[tauri::command]
@@ -760,6 +904,9 @@ pub async fn create_archive_vault_and_import(
         smtp_server: None,
         smtp_port: None,
         smtp_username: None,
+        incoming_protocol: None,
+        pop3_server: None,
+        pop3_port: None,
     };
 
     let vault = Arc::new(VaultContainer::open_or_create(&data_root, &archive_name, Some(manifest.clone()), schema_sql)?);

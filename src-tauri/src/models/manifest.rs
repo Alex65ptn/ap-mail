@@ -28,4 +28,10 @@ pub struct WorkspaceManifest {
     pub smtp_port: Option<u16>,
     #[serde(default)]
     pub smtp_username: Option<String>,
+    #[serde(default)]
+    pub incoming_protocol: Option<String>, // "IMAP" oppure "POP3"
+    #[serde(default)]
+    pub pop3_server: Option<String>,
+    #[serde(default)]
+    pub pop3_port: Option<u16>,
 }

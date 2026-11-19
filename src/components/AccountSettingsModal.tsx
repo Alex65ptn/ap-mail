@@ -22,8 +22,11 @@ export const AccountSettingsModal: React.FC<Props> = ({
   const [name, setName] = useState('');
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
+  const [incomingProtocol, setIncomingProtocol] = useState<'IMAP' | 'POP3'>('IMAP');
   const [imapServer, setImapServer] = useState('');
   const [imapPort, setImapPort] = useState<number>(993);
+  const [pop3Server, setPop3Server] = useState('');
+  const [pop3Port, setPop3Port] = useState<number>(995);
   const [smtpServer, setSmtpServer] = useState('');
   const [smtpPort, setSmtpPort] = useState<number>(465);
   const [smtpUsername, setSmtpUsername] = useState('');
@@ -39,8 +42,12 @@ export const AccountSettingsModal: React.FC<Props> = ({
       setName(currentWs.name || '');
       setEmailAddress(currentWs.email_address || '');
       setPassword('');
+      const proto = (currentWs.incoming_protocol as any) || (currentWs.imap_port === 995 || currentWs.imap_port === 110 ? 'POP3' : 'IMAP');
+      setIncomingProtocol(proto);
       setImapServer(currentWs.imap_server || (currentWs.email_address ? `mail.${currentWs.email_address.split('@')[1]}` : ''));
       setImapPort(currentWs.imap_port || 993);
+      setPop3Server(currentWs.pop3_server || (currentWs.email_address ? `pop.${currentWs.email_address.split('@')[1]}` : ''));
+      setPop3Port(currentWs.pop3_port || 995);
       setSmtpServer(currentWs.smtp_server || (currentWs.email_address ? `mail.${currentWs.email_address.split('@')[1]}` : ''));
       setSmtpPort(currentWs.smtp_port || (currentWs.is_pec ? 465 : 587));
       setSmtpUsername(currentWs.smtp_username || '');
@@ -68,8 +75,11 @@ export const AccountSettingsModal: React.FC<Props> = ({
           name: name.trim() || emailAddress.trim(),
           email_address: emailAddress.trim(),
           password: password.trim() ? password.trim() : null,
+          incoming_protocol: incomingProtocol,
           imap_server: imapServer.trim(),
           imap_port: Number(imapPort),
+          pop3_server: pop3Server.trim() ? pop3Server.trim() : null,
+          pop3_port: pop3Port ? Number(pop3Port) : null,
           smtp_server: smtpServer.trim() ? smtpServer.trim() : null,
           smtp_port: smtpPort ? Number(smtpPort) : null,
           smtp_username: smtpUsername.trim() ? smtpUsername.trim() : null,
@@ -198,36 +208,97 @@ export const AccountSettingsModal: React.FC<Props> = ({
 
           <div className="border-t border-slate-100 my-1" />
 
-          {/* Parametri IMAP */}
+          {/* Scelta Protocollo di Ricezione */}
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center space-x-1.5">
-              <Server className="w-3.5 h-3.5 text-slate-500" />
-              <span>Server Ricezione (IMAP)</span>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <input
-                  type="text"
-                  required
-                  placeholder="mail.dominio.com"
-                  value={imapServer}
-                  onChange={(e) => setImapServer(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 font-mono"
-                />
-              </div>
-              <div>
-                <select
-                  value={imapPort}
-                  onChange={(e) => setImapPort(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 bg-white"
-                >
-                  <option value={993}>993 (SSL)</option>
-                  <option value={143}>143 (STARTTLS)</option>
-                  <option value={995}>995 (POP3s)</option>
-                </select>
-              </div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              Protocollo di Ricezione Posta
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIncomingProtocol('IMAP')}
+                className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all ${
+                  incomingProtocol === 'IMAP'
+                    ? 'bg-amber-500/15 border-amber-500 text-amber-900 shadow-2xs font-bold'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                IMAP (Sincronizzazione)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncomingProtocol('POP3')}
+                className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all ${
+                  incomingProtocol === 'POP3'
+                    ? 'bg-amber-500/15 border-amber-500 text-amber-900 shadow-2xs font-bold'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                POP3 (Download Locale nel Vault)
+              </button>
             </div>
           </div>
+
+          {/* Parametri Ricezione (IMAP o POP3) */}
+          {incomingProtocol === 'POP3' ? (
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center space-x-1.5">
+                <Server className="w-3.5 h-3.5 text-amber-600" />
+                <span>Server Ricezione (POP3)</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="pop.dominio.com o 172.30.1.100"
+                    value={pop3Server}
+                    onChange={(e) => setPop3Server(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 font-mono"
+                  />
+                </div>
+                <div>
+                  <select
+                    value={pop3Port}
+                    onChange={(e) => setPop3Port(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 bg-white font-medium"
+                  >
+                    <option value={995}>995 (POP3s SSL)</option>
+                    <option value={110}>110 (POP3 standard)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center space-x-1.5">
+                <Server className="w-3.5 h-3.5 text-slate-500" />
+                <span>Server Ricezione (IMAP)</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="mail.dominio.com"
+                    value={imapServer}
+                    onChange={(e) => setImapServer(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 font-mono"
+                  />
+                </div>
+                <div>
+                  <select
+                    value={imapPort}
+                    onChange={(e) => setImapPort(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 bg-white"
+                  >
+                    <option value={993}>993 (SSL)</option>
+                    <option value={143}>143 (STARTTLS)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Parametri SMTP */}
           <div>
