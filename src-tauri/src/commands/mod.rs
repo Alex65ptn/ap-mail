@@ -203,6 +203,7 @@ pub async fn send_or_save_email(
     use lettre::message::header::ContentType;
     use lettre::message::Mailbox;
     use lettre::transport::smtp::authentication::Credentials;
+    use lettre::transport::smtp::client::{Tls, TlsParameters};
     use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 
     let vault = state.get_vault(&params.workspace_id)?;
@@ -253,13 +254,27 @@ pub async fn send_or_save_email(
     let build_transport = |user: &str, pwd: &str| -> Result<AsyncSmtpTransport<Tokio1Executor>> {
         let creds = Credentials::new(user.to_string(), pwd.to_string());
         if smtp_port == 465 {
-            AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)
-                .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))
-                .map(|b| b.port(smtp_port).credentials(creds).build())
+            if smtp_host.parse::<std::net::IpAddr>().is_ok() {
+                Ok(AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&smtp_host)
+                    .port(smtp_port)
+                    .credentials(creds)
+                    .build())
+            } else {
+                AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)
+                    .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))
+                    .map(|b| b.port(smtp_port).credentials(creds).build())
+            }
         } else {
-            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp_host)
-                .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))
-                .map(|b| b.port(smtp_port).credentials(creds).build())
+            if smtp_host.parse::<std::net::IpAddr>().is_ok() {
+                Ok(AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&smtp_host)
+                    .port(smtp_port)
+                    .credentials(creds)
+                    .build())
+            } else {
+                AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp_host)
+                    .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))
+                    .map(|b| b.port(smtp_port).credentials(creds).build())
+            }
         }
     };
 
