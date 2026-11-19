@@ -8,20 +8,30 @@ import { VirtualMessageList } from './components/VirtualMessageList';
 import { MessageView } from './components/MessageView';
 import { ImportModal } from './components/ImportModal';
 import { AddAccountModal } from './components/AddAccountModal';
-import { RefreshCw, UserPlus } from 'lucide-react';
+import { ComposeModal } from './components/ComposeModal';
+import { AccountSettingsModal } from './components/AccountSettingsModal';
+import { RefreshCw, UserPlus, PenSquare } from 'lucide-react';
 
 export const App: React.FC = () => {
   const { setWorkspaces, setActiveWorkspace, activeWorkspaceId, setFolders } = useWorkspaceStore();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
+  const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const loadWorkspaces = async () => {
     try {
       const list: any[] = await invoke('list_workspaces');
       setWorkspaces(list);
-      if (list.length > 0 && !activeWorkspaceId) {
-        setActiveWorkspace(list[0].workspace_id);
+      if (list.length > 0) {
+        // Se non c'è workspace attivo o quello attivo non esiste più nella lista
+        const stillExists = list.some((w) => w.workspace_id === activeWorkspaceId);
+        if (!activeWorkspaceId || !stillExists) {
+          setActiveWorkspace(list[0].workspace_id);
+        }
+      } else {
+        setActiveWorkspace(null);
       }
     } catch (e) {
       console.error('Errore caricamento workspaces:', e);
@@ -29,7 +39,10 @@ export const App: React.FC = () => {
   };
 
   const loadFolders = async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceId) {
+      setFolders([]);
+      return;
+    }
     try {
       const fList: any[] = await invoke('list_folders', { workspaceId: activeWorkspaceId });
       setFolders(fList);
@@ -68,7 +81,11 @@ export const App: React.FC = () => {
       />
 
       {/* 2. Barra Albero Cartelle */}
-      <FolderTree />
+      <FolderTree
+        onOpenCompose={() => setIsComposeModalOpen(true)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onRefreshWorkspaces={loadWorkspaces}
+      />
 
       {/* 3. Colonna Principale: Ricerca FTS5 + Virtual List + Visualizzatore Documenti */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -77,6 +94,15 @@ export const App: React.FC = () => {
           <SearchBar />
 
           <div className="flex items-center space-x-2.5">
+            <button
+              onClick={() => setIsComposeModalOpen(true)}
+              disabled={!activeWorkspaceId}
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-xs"
+            >
+              <PenSquare className="w-3.5 h-3.5" />
+              <span>Scrivi</span>
+            </button>
+
             <button
               onClick={() => setIsAddAccountModalOpen(true)}
               className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors border border-slate-200"
@@ -121,6 +147,34 @@ export const App: React.FC = () => {
         onSuccess={() => {
           loadWorkspaces();
           setIsAddAccountModalOpen(false);
+        }}
+      />
+
+      {/* Modale Scrittura Nuovo Messaggio / PEC */}
+      <ComposeModal
+        isOpen={isComposeModalOpen}
+        onClose={() => setIsComposeModalOpen(false)}
+        onSuccess={() => {
+          loadFolders();
+        }}
+      />
+
+      {/* Modale Impostazioni Casella Attiva */}
+      <AccountSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onSuccess={() => {
+          loadWorkspaces();
+        }}
+        onDeleteCurrent={async () => {
+          if (!activeWorkspaceId) return;
+          try {
+            await invoke('delete_workspace', { workspaceId: activeWorkspaceId });
+            setActiveWorkspace(null);
+            loadWorkspaces();
+          } catch (e) {
+            console.error('Errore cancellazione workspace:', e);
+          }
         }}
       />
     </div>

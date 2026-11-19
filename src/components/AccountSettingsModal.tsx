@@ -1,0 +1,315 @@
+import React, { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { Settings, ShieldCheck, Mail, Lock, Server, X, AlertCircle, CheckCircle2, Trash2, Send } from 'lucide-react';
+
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  onDeleteCurrent: () => void;
+}
+
+export const AccountSettingsModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  onDeleteCurrent,
+}) => {
+  const { workspaces, activeWorkspaceId } = useWorkspaceStore();
+  const currentWs = workspaces.find((w) => w.workspace_id === activeWorkspaceId);
+
+  const [name, setName] = useState('');
+  const [emailAddress, setEmailAddress] = useState('');
+  const [password, setPassword] = useState('');
+  const [imapServer, setImapServer] = useState('');
+  const [imapPort, setImapPort] = useState<number>(993);
+  const [smtpServer, setSmtpServer] = useState('');
+  const [smtpPort, setSmtpPort] = useState<number>(465);
+  const [isPec, setIsPec] = useState(false);
+  const [autoDeleteOnServer, setAutoDeleteOnServer] = useState(false);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentWs) {
+      setName(currentWs.name || '');
+      setEmailAddress(currentWs.email_address || '');
+      setPassword('');
+      setImapServer(currentWs.imap_server || (currentWs.email_address ? `mail.${currentWs.email_address.split('@')[1]}` : ''));
+      setImapPort(currentWs.imap_port || 993);
+      setSmtpServer(currentWs.smtp_server || (currentWs.email_address ? `mail.${currentWs.email_address.split('@')[1]}` : ''));
+      setSmtpPort(currentWs.smtp_port || (currentWs.is_pec ? 465 : 587));
+      setIsPec(currentWs.is_pec || false);
+      setAutoDeleteOnServer(currentWs.auto_delete_on_server || false);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+    }
+  }, [currentWs, isOpen]);
+
+  if (!isOpen || !currentWs) return null;
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeWorkspaceId) return;
+
+    setIsSaving(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      await invoke('update_workspace_settings', {
+        params: {
+          workspace_id: activeWorkspaceId,
+          name: name.trim() || emailAddress.trim(),
+          email_address: emailAddress.trim(),
+          password: password.trim() ? password.trim() : null,
+          imap_server: imapServer.trim(),
+          imap_port: Number(imapPort),
+          smtp_server: smtpServer.trim() ? smtpServer.trim() : null,
+          smtp_port: smtpPort ? Number(smtpPort) : null,
+          is_pec: isPec,
+          auto_delete_on_server: autoDeleteOnServer,
+        },
+      });
+
+      setSuccessMsg('Impostazioni aggiornate con successo.');
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 700);
+    } catch (err: any) {
+      setErrorMsg(typeof err === 'string' ? err : err?.message || 'Errore durante l\'aggiornamento.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/90 w-full max-w-xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+        {/* Header Modale */}
+        <div className="px-6 py-4 border-b border-slate-200/80 bg-slate-50/70 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-700 shadow-2xs">
+              <Settings className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Impostazioni Casella</h3>
+              <p className="text-[11px] text-slate-500">Configura server IMAP/SMTP, credenziali e criteri PEC</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Form Impostazioni */}
+        <form onSubmit={handleSave} className="p-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
+          {errorMsg && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center space-x-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              <span>{successMsg}</span>
+            </div>
+          )}
+
+          {/* Nome e Indirizzo */}
+          <div className="grid grid-cols-2 gap-3.5">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Nome Casella
+              </label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Indirizzo Email / PEC
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  value={emailAddress}
+                  onChange={(e) => setEmailAddress(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Password (aggiornamento facoltativo) */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Nuova Password (lascia vuoto per non modificare)
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="password"
+                placeholder="••••••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 placeholder:text-slate-400"
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              La password è memorizzata in sicurezza nel Portachiavi di sistema (macOS Keychain).
+            </p>
+          </div>
+
+          <div className="border-t border-slate-100 my-1" />
+
+          {/* Parametri IMAP */}
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center space-x-1.5">
+              <Server className="w-3.5 h-3.5 text-slate-500" />
+              <span>Server Ricezione (IMAP)</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <input
+                  type="text"
+                  required
+                  placeholder="mail.dominio.com"
+                  value={imapServer}
+                  onChange={(e) => setImapServer(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 font-mono"
+                />
+              </div>
+              <div>
+                <select
+                  value={imapPort}
+                  onChange={(e) => setImapPort(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 bg-white"
+                >
+                  <option value={993}>993 (SSL)</option>
+                  <option value={143}>143 (STARTTLS)</option>
+                  <option value={995}>995 (POP3s)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Parametri SMTP */}
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center space-x-1.5">
+              <Send className="w-3.5 h-3.5 text-slate-500" />
+              <span>Server Invio (SMTP)</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <input
+                  type="text"
+                  placeholder="smtp.dominio.com"
+                  value={smtpServer}
+                  onChange={(e) => setSmtpServer(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 font-mono"
+                />
+              </div>
+              <div>
+                <select
+                  value={smtpPort}
+                  onChange={(e) => setSmtpPort(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 bg-white"
+                >
+                  <option value={465}>465 (SSL)</option>
+                  <option value={587}>587 (TLS)</option>
+                  <option value={25}>25 (Standard)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 my-1" />
+
+          {/* Opzioni PEC ed Expunge */}
+          <div className="space-y-2.5">
+            <label className="flex items-start space-x-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPec}
+                onChange={(e) => setIsPec(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded-md border-slate-300 text-amber-600 focus:ring-amber-500"
+              />
+              <div className="text-xs">
+                <span className="font-semibold text-slate-900 flex items-center space-x-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Casella PEC Certificata</span>
+                </span>
+                <span className="text-[11px] text-slate-500 block">
+                  Attiva il parsing automatico di daticert.xml e buste .p7m CAdES.
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-start space-x-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoDeleteOnServer}
+                onChange={(e) => setAutoDeleteOnServer(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded-md border-slate-300 text-amber-600 focus:ring-amber-500"
+              />
+              <div className="text-xs">
+                <span className="font-semibold text-slate-900">Libera spazio su server (Atomic Expunge)</span>
+                <span className="text-[11px] text-slate-500 block">
+                  Cancella dal server solo dopo la conferma del salvataggio locale e verifica SHA-256.
+                </span>
+              </div>
+            </label>
+          </div>
+
+          {/* Footer Azioni */}
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onDeleteCurrent();
+              }}
+              className="px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl font-medium flex items-center space-x-1.5 transition-colors border border-transparent hover:border-rose-200"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Elimina Casella</span>
+            </button>
+
+            <div className="flex items-center space-x-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              >
+                {isSaving ? 'Salvataggio...' : 'Salva Impostazioni'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

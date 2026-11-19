@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ShieldCheck, Mail, Lock, Server, Check, ArrowRight, X } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Server, ArrowRight, X } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;

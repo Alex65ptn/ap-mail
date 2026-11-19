@@ -8,6 +8,10 @@ export interface WorkspaceManifest {
   created_at_epoch: number;
   is_pec: boolean;
   auto_delete_on_server: boolean;
+  imap_server?: string;
+  imap_port?: number;
+  smtp_server?: string;
+  smtp_port?: number;
 }
 
 export interface Folder {

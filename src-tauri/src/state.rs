@@ -26,6 +26,11 @@ impl AppState {
         map.insert(workspace_id, vault);
     }
 
+    pub fn unregister_vault(&self, workspace_id: &str) {
+        let mut map = self.vaults.write().unwrap();
+        map.remove(workspace_id);
+    }
+
     pub fn get_vault(&self, workspace_id: &str) -> Result<Arc<VaultContainer>> {
         let map = self.vaults.read().unwrap();
         map.get(workspace_id)

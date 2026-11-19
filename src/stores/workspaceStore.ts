@@ -10,7 +10,7 @@ interface WorkspaceState {
   searchQuery: string;
   
   setWorkspaces: (workspaces: WorkspaceManifest[]) => void;
-  setActiveWorkspace: (id: string) => void;
+  setActiveWorkspace: (id: string | null) => void;
   setFolders: (folders: Folder[]) => void;
   setActiveFolder: (id: number | null) => void;
   setSelectedMessage: (msg: MessageItem | null) => void;

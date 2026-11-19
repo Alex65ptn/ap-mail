@@ -17,4 +17,13 @@ pub struct WorkspaceManifest {
     pub created_at_epoch: i64,
     pub is_pec: bool,
     pub auto_delete_on_server: bool,
+    
+    #[serde(default)]
+    pub imap_server: Option<String>,
+    #[serde(default)]
+    pub imap_port: Option<u16>,
+    #[serde(default)]
+    pub smtp_server: Option<String>,
+    #[serde(default)]
+    pub smtp_port: Option<u16>,
 }

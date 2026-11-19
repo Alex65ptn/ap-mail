@@ -91,7 +91,7 @@ export const MessageView: React.FC = () => {
               className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700 shadow-2xs hover:border-slate-300 transition-colors"
             >
               {att.is_p7m ? (
-                <FileCheck2 className="w-4 h-4 text-amber-600" title="Firmato CAdES (.p7m)" />
+                <span title="Firmato CAdES (.p7m)"><FileCheck2 className="w-4 h-4 text-amber-600" /></span>
               ) : (
                 <Download className="w-4 h-4 text-slate-400" />
               )}

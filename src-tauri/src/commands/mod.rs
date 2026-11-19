@@ -43,39 +43,207 @@ pub struct KeysetCursor {
 pub async fn list_workspaces(state: State<'_, AppState>) -> Result<Vec<WorkspaceManifest>> {
     let data_root = state.get_data_root();
     let mut list = Vec::new();
+    let mut seen_emails = std::collections::HashSet::new();
 
+    // Rimuovi eventuali cartelle demo/placeholder
+    let demo_path = data_root.join("default_vault");
+    if demo_path.exists() {
+        let _ = fs::remove_dir_all(&demo_path);
+    }
+
+    if let Ok(entries) = fs::read_dir(&data_root) {
+        let mut dirs: Vec<_> = entries.flatten().filter(|e| e.path().is_dir()).collect();
+        // Ordina per data di modifica decrescente (il più recente prima)
+        dirs.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
+        dirs.reverse();
+
+        for entry in dirs {
+            let p = entry.path();
+            let manifest_path = p.join("manifest.json");
+            if manifest_path.exists() {
+                if let Ok(vault) = VaultContainer::from_existing(p.clone()) {
+                    let email = vault.manifest.email_address.clone().unwrap_or_default();
+                    
+                    // Rimuovi vecchi mock o placeholder
+                    if email == "avvocato@studiolegale.pec.it" || vault.manifest.workspace_id == "default-vault" {
+                        let _ = fs::remove_dir_all(&p);
+                        continue;
+                    }
+
+                    // Se abbiamo già visto questo indirizzo email, è un duplicato rimasto dai tentativi precedenti: ELIMINALO!
+                    if !email.is_empty() && seen_emails.contains(&email) {
+                        let _ = fs::remove_dir_all(&p);
+                        continue;
+                    }
+
+                    if !email.is_empty() {
+                        seen_emails.insert(email);
+                    }
+
+                    let manifest = vault.manifest.clone();
+                    state.register_vault(manifest.workspace_id.clone(), Arc::new(vault));
+                    list.push(manifest);
+                } else {
+                    // Cartella corrotta o incompleta: eliminala
+                    let _ = fs::remove_dir_all(&p);
+                }
+            } else {
+                // Cartella vuota o senza manifest: eliminala
+                let _ = fs::remove_dir_all(&p);
+            }
+        }
+    }
+
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn delete_workspace(state: State<'_, AppState>, workspace_id: String) -> Result<bool> {
+    state.unregister_vault(&workspace_id);
+    let data_root = state.get_data_root();
     if let Ok(entries) = fs::read_dir(&data_root) {
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() && p.join("manifest.json").exists() {
-                if let Ok(vault) = VaultContainer::from_existing(p) {
-                    list.push(vault.manifest.clone());
-                    state.register_vault(vault.manifest.workspace_id.clone(), Arc::new(vault));
+                if let Ok(content) = fs::read_to_string(p.join("manifest.json")) {
+                    if let Ok(manifest) = serde_json::from_str::<WorkspaceManifest>(&content) {
+                        if manifest.workspace_id == workspace_id {
+                            let _ = fs::remove_dir_all(&p);
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateWorkspaceSettingsParams {
+    pub workspace_id: String,
+    pub name: String,
+    pub email_address: String,
+    pub password: Option<String>,
+    pub imap_server: String,
+    pub imap_port: u16,
+    pub smtp_server: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub is_pec: bool,
+    pub auto_delete_on_server: bool,
+}
+
+#[tauri::command]
+pub async fn update_workspace_settings(
+    state: State<'_, AppState>,
+    params: UpdateWorkspaceSettingsParams,
+) -> Result<bool> {
+    let data_root = state.get_data_root();
+    
+    // Se è stata indicata una nuova password, salvala nel Keyring di sistema
+    if let Some(pwd) = &params.password {
+        if !pwd.trim().is_empty() {
+            let _ = keyring::Entry::new("AP_Mail", &params.email_address).map(|e| e.set_password(pwd));
+        }
+    }
+
+    if let Ok(entries) = fs::read_dir(&data_root) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                let manifest_path = p.join("manifest.json");
+                if manifest_path.exists() {
+                    if let Ok(content) = fs::read_to_string(&manifest_path) {
+                        if let Ok(mut manifest) = serde_json::from_str::<WorkspaceManifest>(&content) {
+                            if manifest.workspace_id == params.workspace_id {
+                                manifest.name = params.name;
+                                manifest.email_address = Some(params.email_address.clone());
+                                manifest.imap_server = Some(params.imap_server);
+                                manifest.imap_port = Some(params.imap_port);
+                                manifest.smtp_server = params.smtp_server;
+                                manifest.smtp_port = params.smtp_port;
+                                manifest.is_pec = params.is_pec;
+                                manifest.auto_delete_on_server = params.auto_delete_on_server;
+
+                                if let Ok(file) = fs::File::create(&manifest_path) {
+                                    let _ = serde_json::to_writer_pretty(file, &manifest);
+                                }
+
+                                if let Ok(vault) = VaultContainer::from_existing(p) {
+                                    state.register_vault(manifest.workspace_id.clone(), Arc::new(vault));
+                                }
+
+                                return Ok(true);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Se non ci sono workspace, ne creiamo uno predefinito per accogliere l'utente
-    if list.is_empty() {
-        let default_manifest = WorkspaceManifest {
-            version: 1,
-            workspace_id: "default-vault".to_string(),
-            name: "Casella Principale".to_string(),
-            workspace_type: WorkspaceType::ImapAttivo,
-            email_address: Some("avvocato@studiolegale.pec.it".to_string()),
-            created_at_epoch: chrono::Utc::now().timestamp(),
-            is_pec: true,
-            auto_delete_on_server: false,
-        };
-        let schema_sql = include_str!("../../migrations/schema.sql");
-        if let Ok(vault) = VaultContainer::open_or_create(&data_root, "default_vault", Some(default_manifest.clone()), schema_sql) {
-            state.register_vault("default-vault".to_string(), Arc::new(vault));
-            list.push(default_manifest);
-        }
-    }
+    Ok(false)
+}
 
-    Ok(list)
+#[derive(Debug, Deserialize)]
+pub struct SendEmailParams {
+    pub workspace_id: String,
+    pub to: String,
+    pub subject: String,
+    pub body: String,
+}
+
+#[tauri::command]
+pub async fn send_or_save_email(
+    state: State<'_, AppState>,
+    params: SendEmailParams,
+) -> Result<bool> {
+    let vault = state.get_vault(&params.workspace_id)?;
+    let conn = vault.get_connection()?;
+
+    let sender = vault.manifest.email_address.clone().unwrap_or_else(|| "me@studio.it".to_string());
+    let date_utc = chrono::Utc::now().to_rfc3339();
+    let message_id = format!("<{}@apmail.local>", uuid::Uuid::new_v4());
+
+    let raw_eml = format!(
+        "From: {}\r\nTo: {}\r\nSubject: {}\r\nDate: {}\r\nMessage-ID: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}",
+        sender, params.to, params.subject, date_utc, message_id, params.body
+    );
+
+    let blob = vault.cas.store_bytes(raw_eml.as_bytes(), "eml")?;
+
+    let sent_folder_id: i64 = conn.query_row(
+        "SELECT id FROM folders WHERE remote_name = 'Sent' OR display_name = 'Posta inviata' LIMIT 1",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(2);
+
+    let is_pec = vault.manifest.is_pec;
+    let pec_type = if is_pec { "POSTA_CERTIFICATA" } else { "NONE" };
+
+    conn.execute(
+        "INSERT INTO messages (
+            folder_id, message_id, subject, sender_name, sender_address,
+            date_epoch, date_iso, snippet, raw_eml_blob_hash, raw_size_bytes,
+            has_attachments, is_read, is_pec, pec_type
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, 1, ?11, ?12)",
+        rusqlite::params![
+            sent_folder_id,
+            message_id,
+            params.subject,
+            "Me",
+            sender,
+            chrono::Utc::now().timestamp(),
+            date_utc,
+            params.body.chars().take(200).collect::<String>(),
+            blob.sha256_hash,
+            blob.size_bytes as i64,
+            is_pec,
+            pec_type,
+        ],
+    )?;
+
+    Ok(true)
 }
 
 #[derive(Debug, Serialize)]
@@ -341,6 +509,24 @@ pub async fn add_imap_account(
     let _ = keyring::Entry::new("AP_Mail", &email_address).map(|e| e.set_password(&password));
 
     let data_root = state.get_data_root();
+
+    // Se esiste già una casella per questa email, rimuovila per evitare doppioni
+    if let Ok(entries) = fs::read_dir(&data_root) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                if let Ok(content) = fs::read_to_string(p.join("manifest.json")) {
+                    if let Ok(existing_manifest) = serde_json::from_str::<WorkspaceManifest>(&content) {
+                        if existing_manifest.email_address.as_deref() == Some(&email_address) {
+                            state.unregister_vault(&existing_manifest.workspace_id);
+                            let _ = fs::remove_dir_all(&p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let schema_sql = include_str!("../../migrations/schema.sql");
     let workspace_id = uuid::Uuid::new_v4().to_string();
     let folder_name = format!("account_{}", workspace_id[0..8].to_string());
@@ -354,6 +540,10 @@ pub async fn add_imap_account(
         created_at_epoch: chrono::Utc::now().timestamp(),
         is_pec,
         auto_delete_on_server,
+        imap_server: Some(imap_server.clone()),
+        imap_port: Some(imap_port),
+        smtp_server: Some(imap_server.replace("imap.", "smtp.").replace("imaps.", "smtps.")),
+        smtp_port: Some(if is_pec { 465 } else { 587 }),
     };
 
     let vault = Arc::new(VaultContainer::open_or_create(&data_root, &folder_name, Some(manifest.clone()), schema_sql)?);
@@ -406,6 +596,10 @@ pub async fn create_archive_vault_and_import(
         created_at_epoch: chrono::Utc::now().timestamp(),
         is_pec: false,
         auto_delete_on_server: false,
+        imap_server: None,
+        imap_port: None,
+        smtp_server: None,
+        smtp_port: None,
     };
 
     let vault = Arc::new(VaultContainer::open_or_create(&data_root, &archive_name, Some(manifest.clone()), schema_sql)?);
