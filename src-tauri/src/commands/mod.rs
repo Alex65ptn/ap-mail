@@ -67,7 +67,7 @@ pub async fn list_workspaces(state: State<'_, AppState>) -> Result<Vec<Workspace
             is_pec: true,
             auto_delete_on_server: false,
         };
-        let schema_sql = include_str!("../migrations/schema.sql");
+        let schema_sql = include_str!("../../migrations/schema.sql");
         if let Ok(vault) = VaultContainer::open_or_create(&data_root, "default_vault", Some(default_manifest.clone()), schema_sql) {
             state.register_vault("default-vault".to_string(), Arc::new(vault));
             list.push(default_manifest);
@@ -237,7 +237,7 @@ pub async fn get_message_details(
 
     // Leggi il file .eml dal CAS
     let raw_eml = vault.cas.get_sync(&raw_hash, "eml").unwrap_or_default();
-    let parsed = mail_parser::Message::parse(&raw_eml);
+    let parsed = mail_parser::MessageParser::default().parse(&raw_eml);
 
     let (body_html, body_text) = if let Some(msg) = parsed {
         let html = msg.body_html(0).map(|s| s.to_string());
@@ -273,7 +273,7 @@ pub async fn create_archive_vault_and_import(
     _mbox_variant: Option<String>,
 ) -> Result<String> {
     let data_root = state.get_data_root();
-    let schema_sql = include_str!("../migrations/schema.sql");
+    let schema_sql = include_str!("../../migrations/schema.sql");
     let manifest = WorkspaceManifest {
         version: 1,
         workspace_id: uuid::Uuid::new_v4().to_string(),

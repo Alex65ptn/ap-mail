@@ -16,7 +16,7 @@ impl CadesExtractor {
         let signed_data = SignedData::from_der(&signed_data_bytes)
             .map_err(|e| AppError::Vault(format!("Errore SignedData: {}", e)))?;
 
-        if let Some(econtent) = signed_data.encap_content_info.e_content {
+        if let Some(econtent) = signed_data.encap_content_info.econtent {
             let inner_bytes = econtent.to_der()
                 .map_err(|e| AppError::Vault(format!("Errore eContent DER: {}", e)))?;
 

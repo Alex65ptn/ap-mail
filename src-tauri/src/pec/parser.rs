@@ -1,4 +1,4 @@
-use mail_parser::{Message, MimeHeaders};
+use mail_parser::MimeHeaders;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use crate::error::{AppError, Result};
@@ -8,7 +8,7 @@ pub struct PecParser;
 
 impl PecParser {
     pub fn classify_and_parse(eml_bytes: &[u8]) -> Result<PecClassification> {
-        let parsed = Message::parse(eml_bytes)
+        let parsed = mail_parser::MessageParser::default().parse(eml_bytes)
             .ok_or_else(|| AppError::Vault("Impossibile effettuare il parse MIME".into()))?;
 
         let mut daticert_bytes: Option<Vec<u8>> = None;
@@ -99,6 +99,7 @@ impl PecParser {
                 Ok(Event::End(_)) => { current_tag.clear(); }
                 Ok(Event::Eof) => break,
                 Err(e) => return Err(AppError::Vault(format!("Errore XML daticert: {}", e))),
+                _ => {}
             }
             buf.clear();
         }
