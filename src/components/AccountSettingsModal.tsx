@@ -408,6 +408,19 @@ export const AccountSettingsModal: React.FC<Props> = ({
             </label>
           </div>
 
+          {/* Indicatore di verifica in corso */}
+          {isTesting && (
+            <div className="p-3 bg-amber-50/80 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center space-x-2.5 animate-pulse">
+              <RefreshCw className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+              <div>
+                <span className="font-bold">Verifica di rete in corso...</span>
+                <span className="block text-[11px] text-amber-800/80 mt-0.5">
+                  Interrogazione socket su {incomingProtocol === 'POP3' ? (pop3Server || 'mail.apconsulting.it') : (imapServer || 'mail.apconsulting.it')}:{incomingProtocol === 'POP3' ? pop3Port : imapPort} e SMTP su {smtpServer || 'mail.apconsulting.it'}:{smtpPort}...
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Card Esito Test Connessione & Console Dettagliata */}
           {testResult && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden space-y-0 text-xs animate-in fade-in">
