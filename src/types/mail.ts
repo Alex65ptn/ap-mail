@@ -12,6 +12,7 @@ export interface WorkspaceManifest {
   imap_port?: number;
   smtp_server?: string;
   smtp_port?: number;
+  smtp_username?: string;
 }
 
 export interface Folder {

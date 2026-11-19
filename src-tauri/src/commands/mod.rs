@@ -129,6 +129,7 @@ pub struct UpdateWorkspaceSettingsParams {
     pub imap_port: u16,
     pub smtp_server: Option<String>,
     pub smtp_port: Option<u16>,
+    pub smtp_username: Option<String>,
     pub is_pec: bool,
     pub auto_delete_on_server: bool,
 }
@@ -162,6 +163,7 @@ pub async fn update_workspace_settings(
                                 manifest.imap_port = Some(params.imap_port);
                                 manifest.smtp_server = params.smtp_server;
                                 manifest.smtp_port = params.smtp_port;
+                                manifest.smtp_username = params.smtp_username;
                                 manifest.is_pec = params.is_pec;
                                 manifest.auto_delete_on_server = params.auto_delete_on_server;
 
@@ -239,31 +241,51 @@ pub async fn send_or_save_email(
 
     let smtp_port = vault.manifest.smtp_port.unwrap_or(if vault.manifest.is_pec { 465 } else { 587 });
 
-    // 4. Recupero password dal Portachiavi
+    // 4. Recupero password dal Portachiavi di sistema
     let password = keyring::Entry::new("AP_Mail", &sender)
         .and_then(|e| e.get_password())
         .unwrap_or_default();
 
-    let creds = Credentials::new(sender.clone(), password);
+    let primary_user = vault.manifest.smtp_username.clone()
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or_else(|| sender.clone());
 
-    // 5. Configurazione trasporto SMTP
-    let mailer: AsyncSmtpTransport<Tokio1Executor> = if smtp_port == 465 {
-        AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)
-            .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))?
-            .port(smtp_port)
-            .credentials(creds)
-            .build()
-    } else {
-        AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp_host)
-            .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))?
-            .port(smtp_port)
-            .credentials(creds)
-            .build()
+    let build_transport = |user: &str, pwd: &str| -> Result<AsyncSmtpTransport<Tokio1Executor>> {
+        let creds = Credentials::new(user.to_string(), pwd.to_string());
+        if smtp_port == 465 {
+            AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)
+                .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))
+                .map(|b| b.port(smtp_port).credentials(creds).build())
+        } else {
+            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp_host)
+                .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))
+                .map(|b| b.port(smtp_port).credentials(creds).build())
+        }
     };
 
-    // 6. TRASMISSIONE REALE VIA RETE
-    mailer.send(email).await
-        .map_err(|e| AppError::Vault(format!("Errore invio SMTP su {}:{}: {}", smtp_host, smtp_port, e)))?;
+    // 5. Tentativo di invio con l'utente primario
+    let mailer = build_transport(&primary_user, &password)?;
+    let send_result = mailer.send(email.clone()).await;
+
+    // Se l'autenticazione fallisce (535) e l'username conteneva '@', tenta automaticamente con il solo nome utente locale (es. "admin")
+    if let Err(e) = send_result {
+        let err_str = e.to_string();
+        if (err_str.contains("535") || err_str.contains("authentication failed")) && primary_user.contains('@') {
+            let local_user = primary_user.split('@').next().unwrap_or(&primary_user);
+            if let Ok(retry_mailer) = build_transport(local_user, &password) {
+                if let Err(retry_err) = retry_mailer.send(email).await {
+                    return Err(AppError::Vault(format!(
+                        "Autenticazione SMTP fallita (535) su {}:{}. Il server ha rifiutato sia '{}' che '{}'. Controlla la password o imposta il nome utente esatto nelle Impostazioni (⚙️). (Dettaglio: {})",
+                        smtp_host, smtp_port, primary_user, local_user, retry_err
+                    )));
+                }
+            } else {
+                return Err(AppError::Vault(format!("Errore invio SMTP su {}:{}: {}", smtp_host, smtp_port, e)));
+            }
+        } else {
+            return Err(AppError::Vault(format!("Errore invio SMTP su {}:{}: {}", smtp_host, smtp_port, e)));
+        }
+    }
 
     // 7. Salvataggio locale nel Vault CAS e nel DB solo DOPO avvenuta spedizione
     let raw_eml = format!(
@@ -661,6 +683,7 @@ pub async fn add_imap_account(
         imap_port: Some(imap_port),
         smtp_server: Some(imap_server.replace("imap.", "smtp.").replace("imaps.", "smtps.")),
         smtp_port: Some(if is_pec { 465 } else { 587 }),
+        smtp_username: None,
     };
 
     let vault = Arc::new(VaultContainer::open_or_create(&data_root, &folder_name, Some(manifest.clone()), schema_sql)?);
@@ -721,6 +744,7 @@ pub async fn create_archive_vault_and_import(
         imap_port: None,
         smtp_server: None,
         smtp_port: None,
+        smtp_username: None,
     };
 
     let vault = Arc::new(VaultContainer::open_or_create(&data_root, &archive_name, Some(manifest.clone()), schema_sql)?);

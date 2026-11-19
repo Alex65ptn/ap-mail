@@ -26,4 +26,6 @@ pub struct WorkspaceManifest {
     pub smtp_server: Option<String>,
     #[serde(default)]
     pub smtp_port: Option<u16>,
+    #[serde(default)]
+    pub smtp_username: Option<String>,
 }

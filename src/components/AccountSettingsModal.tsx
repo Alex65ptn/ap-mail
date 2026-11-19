@@ -26,6 +26,7 @@ export const AccountSettingsModal: React.FC<Props> = ({
   const [imapPort, setImapPort] = useState<number>(993);
   const [smtpServer, setSmtpServer] = useState('');
   const [smtpPort, setSmtpPort] = useState<number>(465);
+  const [smtpUsername, setSmtpUsername] = useState('');
   const [isPec, setIsPec] = useState(false);
   const [autoDeleteOnServer, setAutoDeleteOnServer] = useState(false);
 
@@ -42,6 +43,7 @@ export const AccountSettingsModal: React.FC<Props> = ({
       setImapPort(currentWs.imap_port || 993);
       setSmtpServer(currentWs.smtp_server || (currentWs.email_address ? `mail.${currentWs.email_address.split('@')[1]}` : ''));
       setSmtpPort(currentWs.smtp_port || (currentWs.is_pec ? 465 : 587));
+      setSmtpUsername(currentWs.smtp_username || '');
       setIsPec(currentWs.is_pec || false);
       setAutoDeleteOnServer(currentWs.auto_delete_on_server || false);
       setErrorMsg(null);
@@ -70,6 +72,7 @@ export const AccountSettingsModal: React.FC<Props> = ({
           imap_port: Number(imapPort),
           smtp_server: smtpServer.trim() ? smtpServer.trim() : null,
           smtp_port: smtpPort ? Number(smtpPort) : null,
+          smtp_username: smtpUsername.trim() ? smtpUsername.trim() : null,
           is_pec: isPec,
           auto_delete_on_server: autoDeleteOnServer,
         },
@@ -173,6 +176,23 @@ export const AccountSettingsModal: React.FC<Props> = ({
             </div>
             <p className="text-[10px] text-slate-400 mt-1">
               La password è memorizzata in sicurezza nel Portachiavi di sistema (macOS Keychain).
+            </p>
+          </div>
+
+          {/* Nome Utente SMTP / IMAP */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Nome Utente per Autenticazione (lascia vuoto se coincide con l'email)
+            </label>
+            <input
+              type="text"
+              placeholder={emailAddress ? `${emailAddress} oppure ${emailAddress.split('@')[0]}` : "es. admin oppure i7"}
+              value={smtpUsername}
+              onChange={(e) => setSmtpUsername(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 placeholder:text-slate-400 font-mono"
+            />
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Su server Postfix/Linux alcuni account usano la sola parte iniziale (es. "admin" o "i7") anziché l'email completa.
             </p>
           </div>
 
