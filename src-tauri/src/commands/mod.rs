@@ -307,6 +307,62 @@ pub async fn send_or_save_email(
     Ok(true)
 }
 
+#[tauri::command]
+pub async fn save_draft_email(
+    state: State<'_, AppState>,
+    params: SendEmailParams,
+) -> Result<bool> {
+    let vault = state.get_vault(&params.workspace_id)?;
+    let conn = vault.get_connection()?;
+
+    let sender = vault.manifest.email_address.clone().unwrap_or_else(|| "me@studio.it".to_string());
+    let date_utc = chrono::Utc::now().to_rfc3339();
+    let message_id = format!("<draft-{}@apmail.local>", uuid::Uuid::new_v4());
+
+    let raw_eml = format!(
+        "From: {}\r\nTo: {}\r\nSubject: {}\r\nDate: {}\r\nMessage-ID: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}",
+        sender, params.to, params.subject, date_utc, message_id, params.body
+    );
+
+    let blob = vault.cas.store_bytes(raw_eml.as_bytes(), "eml")?;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO folders (remote_name, display_name) VALUES ('Drafts', 'Bozze')",
+        [],
+    )?;
+
+    let draft_folder_id: i64 = conn.query_row(
+        "SELECT id FROM folders WHERE remote_name = 'Drafts' OR display_name = 'Bozze' LIMIT 1",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(3);
+
+    let is_pec = vault.manifest.is_pec;
+
+    conn.execute(
+        "INSERT INTO messages (
+            folder_id, message_id, subject, sender_name, sender_address,
+            date_epoch, date_iso, snippet, raw_eml_blob_hash, raw_size_bytes,
+            has_attachments, is_read, is_draft, is_pec, pec_type
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, 1, 1, ?11, 'NONE')",
+        rusqlite::params![
+            draft_folder_id,
+            message_id,
+            if params.subject.trim().is_empty() { "(Bozza senza oggetto)" } else { &params.subject },
+            "Me",
+            sender,
+            chrono::Utc::now().timestamp(),
+            date_utc,
+            params.body.chars().take(200).collect::<String>(),
+            blob.sha256_hash,
+            blob.size_bytes as i64,
+            is_pec,
+        ],
+    )?;
+
+    Ok(true)
+}
+
 #[derive(Debug, Serialize)]
 pub struct FolderDto {
     pub id: i64,
@@ -617,6 +673,10 @@ pub async fn add_imap_account(
     )?;
     conn.execute(
         "INSERT OR IGNORE INTO folders (remote_name, display_name) VALUES ('Sent', 'Posta inviata')",
+        [],
+    )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO folders (remote_name, display_name) VALUES ('Drafts', 'Bozze')",
         [],
     )?;
     conn.execute(

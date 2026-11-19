@@ -34,6 +34,7 @@ pub fn run() {
             commands::delete_workspace,
             commands::update_workspace_settings,
             commands::send_or_save_email,
+            commands::save_draft_email,
             commands::list_folders,
             commands::get_messages_keyset,
             commands::get_message_details,
