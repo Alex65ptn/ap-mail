@@ -282,15 +282,15 @@ async fn test_pop3(
 ) -> ConnectionTestStep {
     add_log(logs, "RICEZIONE", "INFO", &format!("Avvio diagnostica ricezione POP3 per {}:{}...", host, port));
     
-    // Risoluzione DNS / IP
-    match tokio::net::lookup_host(format!("{}:{}", host, port)).await {
-        Ok(mut addrs) => {
-            if let Some(addr) = addrs.next() {
-                add_log(logs, "RICEZIONE", "INFO", &format!("Indirizzo host risolto: IP {}", addr.ip()));
-            }
-        }
-        Err(e) => {
-            add_log(logs, "RICEZIONE", "WARN", &format!("Impossibile risolvere host '{}': {}", host, e));
+    // Risoluzione rapida DNS con timeout 1.5s
+    let resolved = tokio::time::timeout(
+        std::time::Duration::from_millis(1500),
+        tokio::net::lookup_host(format!("{}:{}", host, port))
+    ).await;
+
+    if let Ok(Ok(mut addrs)) = resolved {
+        if let Some(addr) = addrs.next() {
+            add_log(logs, "RICEZIONE", "INFO", &format!("Indirizzo host risolto: IP {}", addr.ip()));
         }
     }
 
@@ -298,7 +298,7 @@ async fn test_pop3(
     add_log(logs, "RICEZIONE", "INFO", &format!("Apertura socket TCP su porta {} (TLS: {})...", port, if use_tls { "Attivo (SSL/TLS)" } else { "Disattivo (Plain TCP)" }));
 
     let connect_res = tokio::time::timeout(
-        std::time::Duration::from_secs(6),
+        std::time::Duration::from_secs(3),
         crate::pop3::client::Pop3Client::connect(host, port, use_tls),
     ).await;
 
@@ -315,10 +315,10 @@ async fn test_pop3(
             };
         }
         Err(_) => {
-            add_log(logs, "RICEZIONE", "ERROR", &format!("Timeout di connessione (6s) verso {}:{}.", host, port));
+            add_log(logs, "RICEZIONE", "ERROR", &format!("Timeout di connessione (3s) verso {}:{}. Porta chiusa o irraggiungibile.", host, port));
             return ConnectionTestStep {
                 success: false,
-                message: format!("Timeout connessione POP3 verso {}:{}. Verifica host o firewall/router.", host, port),
+                message: format!("Timeout connessione POP3 verso {}:{}. Porta chiusa o non raggiungibile.", host, port),
             };
         }
     };
@@ -326,38 +326,33 @@ async fn test_pop3(
     if let Some(password) = pwd {
         if !password.trim().is_empty() {
             let mut candidates = Vec::new();
-            let mut add_cand = |c: &str| {
-                let trimmed = c.trim().to_string();
-                if !trimmed.is_empty() && !candidates.contains(&trimmed) {
-                    candidates.push(trimmed);
-                }
-            };
-            add_cand(user);
-            add_cand(&user.to_lowercase());
-            if user.contains('@') {
-                let loc = user.split('@').next().unwrap_or(user);
-                add_cand(loc);
-                add_cand(&loc.to_lowercase());
+            candidates.push(user.to_string());
+            let lower = user.to_lowercase();
+            if lower != user {
+                candidates.push(lower);
             }
 
             let mut last_err = None;
             for (idx, cand) in candidates.iter().enumerate() {
                 if idx > 0 {
-                    match crate::pop3::client::Pop3Client::connect(host, port, use_tls).await {
-                        Ok(new_c) => client = new_c,
-                        Err(e) => {
-                            last_err = Some(e.to_string());
-                            break;
-                        }
+                    match tokio::time::timeout(std::time::Duration::from_secs(2), crate::pop3::client::Pop3Client::connect(host, port, use_tls)).await {
+                        Ok(Ok(new_c)) => client = new_c,
+                        _ => break,
                     }
                 }
 
                 add_log(logs, "RICEZIONE", "INFO", &format!("Tentativo autenticazione POP3 con account '{}'...", cand));
-                match client.login(cand, password).await {
-                    Ok(_) => {
-                        add_log(logs, "RICEZIONE", "SUCCESS", &format!("Autenticazione riuscita! Accesso autorizzato per l'account '{}'.", cand));
+                
+                let login_res = tokio::time::timeout(
+                    std::time::Duration::from_secs(3),
+                    client.login(cand, password)
+                ).await;
+
+                match login_res {
+                    Ok(Ok(_)) => {
+                        add_log(logs, "RICEZIONE", "SUCCESS", &format!("Autenticazione riuscita! Accesso autorizzato per '{}'.", cand));
                         
-                        if let Ok(uidls) = client.get_uidl_list().await {
+                        if let Ok(Ok(uidls)) = tokio::time::timeout(std::time::Duration::from_secs(2), client.get_uidl_list()).await {
                             add_log(logs, "RICEZIONE", "SUCCESS", &format!("Interrogazione casella: presenti {} messaggi sul server.", uidls.len()));
                         }
                         
@@ -369,9 +364,13 @@ async fn test_pop3(
                             message: format!("Server POP3 OK ({}:{}) - Accesso riuscito come '{}'", host, port, cand),
                         };
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         add_log(logs, "RICEZIONE", "WARN", &format!("Credenziali respinte dal server per '{}': {}", cand, e));
                         last_err = Some(e.to_string());
+                    }
+                    Err(_) => {
+                        add_log(logs, "RICEZIONE", "WARN", &format!("Timeout risposta login per '{}'.", cand));
+                        last_err = Some("Timeout risposta autenticazione".to_string());
                     }
                 }
             }
@@ -380,7 +379,7 @@ async fn test_pop3(
             add_log(logs, "RICEZIONE", "ERROR", &format!("Autenticazione fallita per tutti i formati utente ({}).", err_desc));
             return ConnectionTestStep {
                 success: false,
-                message: format!("Server POP3 {}:{} raggiungibile ma autenticazione fallita per ['{}']. ({})", host, port, candidates.join("', '"), err_desc),
+                message: format!("Server POP3 {}:{} raggiungibile ma autenticazione fallita ({})", host, port, err_desc),
             };
         }
     }
@@ -402,14 +401,14 @@ async fn test_imap(
 ) -> ConnectionTestStep {
     add_log(logs, "RICEZIONE", "INFO", &format!("Avvio diagnostica ricezione IMAP per {}:{}...", host, port));
     
-    match tokio::net::lookup_host(format!("{}:{}", host, port)).await {
-        Ok(mut addrs) => {
-            if let Some(addr) = addrs.next() {
-                add_log(logs, "RICEZIONE", "INFO", &format!("Indirizzo host risolto: IP {}", addr.ip()));
-            }
-        }
-        Err(e) => {
-            add_log(logs, "RICEZIONE", "WARN", &format!("Impossibile risolvere host '{}': {}", host, e));
+    let resolved = tokio::time::timeout(
+        std::time::Duration::from_millis(1500),
+        tokio::net::lookup_host(format!("{}:{}", host, port))
+    ).await;
+
+    if let Ok(Ok(mut addrs)) = resolved {
+        if let Some(addr) = addrs.next() {
+            add_log(logs, "RICEZIONE", "INFO", &format!("Indirizzo host risolto: IP {}", addr.ip()));
         }
     }
 
@@ -417,7 +416,7 @@ async fn test_imap(
     add_log(logs, "RICEZIONE", "INFO", &format!("Apertura socket TCP su {}...", addr));
 
     let connect_res = tokio::time::timeout(
-        std::time::Duration::from_secs(6),
+        std::time::Duration::from_secs(3),
         tokio::net::TcpStream::connect(&addr),
     ).await;
 
@@ -437,10 +436,10 @@ async fn test_imap(
             }
         }
         Err(_) => {
-            add_log(logs, "RICEZIONE", "ERROR", &format!("Timeout di connessione (6s) verso {}:{}.", host, port));
+            add_log(logs, "RICEZIONE", "ERROR", &format!("Timeout di connessione (3s) verso {}:{}.", host, port));
             ConnectionTestStep {
                 success: false,
-                message: format!("Timeout connessione IMAP verso {}:{}. Verifica porte o Port Forwarding.", host, port),
+                message: format!("Timeout connessione IMAP verso {}:{}. Porta chiusa o non raggiungibile.", host, port),
             }
         }
     }
@@ -463,24 +462,24 @@ async fn test_smtp(
         };
     }
 
-    match tokio::net::lookup_host(format!("{}:{}", host, port)).await {
-        Ok(mut addrs) => {
-            if let Some(addr) = addrs.next() {
-                add_log(logs, "INVIO SMTP", "INFO", &format!("Indirizzo host risolto: IP {}", addr.ip()));
-            }
-        }
-        Err(e) => {
-            add_log(logs, "INVIO SMTP", "WARN", &format!("Impossibile risolvere host '{}': {}", host, e));
+    let resolved = tokio::time::timeout(
+        std::time::Duration::from_millis(1500),
+        tokio::net::lookup_host(format!("{}:{}", host, port))
+    ).await;
+
+    if let Ok(Ok(mut addrs)) = resolved {
+        if let Some(addr) = addrs.next() {
+            add_log(logs, "INVIO SMTP", "INFO", &format!("Indirizzo host risolto: IP {}", addr.ip()));
         }
     }
 
     let password = pwd.unwrap_or_default();
     if password.trim().is_empty() {
-        add_log(logs, "INVIO SMTP", "WARN", "Nessuna password salvata: test della sola disponibilità della porta di rete...");
+        add_log(logs, "INVIO SMTP", "WARN", "Nessuna password salvata: test della sola disponibilità della porta...");
         let addr = format!("{}:{}", host, port);
-        match tokio::time::timeout(std::time::Duration::from_secs(5), tokio::net::TcpStream::connect(&addr)).await {
+        match tokio::time::timeout(std::time::Duration::from_secs(3), tokio::net::TcpStream::connect(&addr)).await {
             Ok(Ok(_)) => {
-                add_log(logs, "INVIO SMTP", "SUCCESS", "Porta SMTP aperta e raggiungibile (inserisci la password per testare l'invio e l'autenticazione).");
+                add_log(logs, "INVIO SMTP", "SUCCESS", "Porta SMTP aperta e raggiungibile (inserisci la password per testare l'autenticazione).");
                 return ConnectionTestStep {
                     success: true,
                     message: format!("Porta SMTP {}:{} aperta (inserisci la password per testare l'autenticazione)", host, port),
@@ -494,7 +493,7 @@ async fn test_smtp(
                 };
             }
             Err(_) => {
-                add_log(logs, "INVIO SMTP", "ERROR", &format!("Timeout di connessione (5s) verso {}:{}.", host, port));
+                add_log(logs, "INVIO SMTP", "ERROR", &format!("Timeout di connessione (3s) verso {}:{}.", host, port));
                 return ConnectionTestStep {
                     success: false,
                     message: format!("Timeout connessione SMTP verso {}:{}. Controlla il Port Forwarding.", host, port),
@@ -504,18 +503,10 @@ async fn test_smtp(
     }
 
     let mut candidates = Vec::new();
-    let mut add_cand = |c: &str| {
-        let trimmed = c.trim().to_string();
-        if !trimmed.is_empty() && !candidates.contains(&trimmed) {
-            candidates.push(trimmed);
-        }
-    };
-    add_cand(user);
-    add_cand(&user.to_lowercase());
-    if user.contains('@') {
-        let loc = user.split('@').next().unwrap_or(user);
-        add_cand(loc);
-        add_cand(&loc.to_lowercase());
+    candidates.push(user.to_string());
+    let lower = user.to_lowercase();
+    if lower != user {
+        candidates.push(lower);
     }
 
     let is_ip = host.parse::<std::net::IpAddr>().is_ok();
@@ -562,7 +553,7 @@ async fn test_smtp(
             }
         };
 
-        match tokio::time::timeout(std::time::Duration::from_secs(6), mailer.test_connection()).await {
+        match tokio::time::timeout(std::time::Duration::from_secs(3), mailer.test_connection()).await {
             Ok(Ok(true)) => {
                 add_log(logs, "INVIO SMTP", "SUCCESS", &format!("Autenticazione SMTP riuscita! Handshake EHLO e comando NOOP accettati con utente '{}'.", cand));
                 return ConnectionTestStep {
@@ -583,7 +574,7 @@ async fn test_smtp(
                 }
             }
             Err(_) => {
-                add_log(logs, "INVIO SMTP", "ERROR", &format!("Timeout connessione SMTP (6s) verso {}:{}.", host, port));
+                add_log(logs, "INVIO SMTP", "ERROR", &format!("Timeout connessione SMTP (3s) verso {}:{}.", host, port));
                 last_err = Some(format!("Timeout connessione SMTP verso {}:{}", host, port));
                 break;
             }
@@ -602,49 +593,60 @@ async fn test_smtp(
 pub async fn test_mail_connection(
     params: TestConnectionParams,
 ) -> Result<ConnectionTestReport> {
-    let mut logs: Vec<ConnectionLogEntry> = Vec::new();
-
     let password = params.password
         .filter(|p| !p.trim().is_empty())
         .or_else(|| get_keyring_password(&params.email_address));
 
+    let smtp_user = params.outgoing_username
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or_else(|| params.email_address.clone());
+
+    // Esegui test di ricezione e test di invio IN PARALLELO
+    let incoming_future = async {
+        let mut in_logs = Vec::new();
+        let step = if params.incoming_protocol.to_uppercase() == "POP3" {
+            test_pop3(
+                &params.incoming_server,
+                params.incoming_port,
+                &params.email_address,
+                password.as_deref(),
+                &mut in_logs,
+            ).await
+        } else {
+            test_imap(
+                &params.incoming_server,
+                params.incoming_port,
+                &params.email_address,
+                password.as_deref(),
+                &mut in_logs,
+            ).await
+        };
+        (step, in_logs)
+    };
+
+    let outgoing_future = async {
+        let mut out_logs = Vec::new();
+        let step = test_smtp(
+            &params.outgoing_server,
+            params.outgoing_port,
+            &smtp_user,
+            password.as_deref(),
+            &mut out_logs,
+        ).await;
+        (step, out_logs)
+    };
+
+    let ((incoming, in_logs), (outgoing, out_logs)) = tokio::join!(incoming_future, outgoing_future);
+
+    let mut logs = Vec::new();
     if let Some(ref p) = password {
         add_log(&mut logs, "SISTEMA", "INFO", &format!("Password presente nel Portachiavi (lunghezza: {} caratteri).", p.len()));
     } else {
         add_log(&mut logs, "SISTEMA", "WARN", "Nessuna password trovata nel Portachiavi o nel modulo.");
     }
 
-    // 1. Posta in entrata
-    let incoming = if params.incoming_protocol.to_uppercase() == "POP3" {
-        test_pop3(
-            &params.incoming_server,
-            params.incoming_port,
-            &params.email_address,
-            password.as_deref(),
-            &mut logs,
-        ).await
-    } else {
-        test_imap(
-            &params.incoming_server,
-            params.incoming_port,
-            &params.email_address,
-            password.as_deref(),
-            &mut logs,
-        ).await
-    };
-
-    // 2. Posta in uscita
-    let smtp_user = params.outgoing_username
-        .filter(|u| !u.trim().is_empty())
-        .unwrap_or_else(|| params.email_address.clone());
-
-    let outgoing = test_smtp(
-        &params.outgoing_server,
-        params.outgoing_port,
-        &smtp_user,
-        password.as_deref(),
-        &mut logs,
-    ).await;
+    logs.extend(in_logs);
+    logs.extend(out_logs);
 
     if incoming.success && outgoing.success {
         add_log(&mut logs, "SISTEMA", "SUCCESS", "TUTTI I TEST SUPERATI: Entrata e Uscita perfettamente funzionanti!");
