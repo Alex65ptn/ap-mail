@@ -4,7 +4,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::models::manifest::{WorkspaceManifest, WorkspaceType};
 use crate::state::AppState;
 use crate::vault::container::VaultContainer;
@@ -198,6 +198,11 @@ pub async fn send_or_save_email(
     state: State<'_, AppState>,
     params: SendEmailParams,
 ) -> Result<bool> {
+    use lettre::message::header::ContentType;
+    use lettre::message::Mailbox;
+    use lettre::transport::smtp::authentication::Credentials;
+    use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+
     let vault = state.get_vault(&params.workspace_id)?;
     let conn = vault.get_connection()?;
 
@@ -205,6 +210,62 @@ pub async fn send_or_save_email(
     let date_utc = chrono::Utc::now().to_rfc3339();
     let message_id = format!("<{}@apmail.local>", uuid::Uuid::new_v4());
 
+    // 1. Parsing indirizzi mittente e destinatario
+    let sender_mailbox: Mailbox = sender.parse()
+        .map_err(|e| AppError::Vault(format!("Indirizzo mittente non valido ({}): {}", sender, e)))?;
+    let recipient_mailbox: Mailbox = params.to.parse()
+        .map_err(|e| AppError::Vault(format!("Indirizzo destinatario non valido ({}): {}", params.to, e)))?;
+
+    // 2. Costruzione messaggio RFC-5322
+    let email = lettre::Message::builder()
+        .from(sender_mailbox)
+        .to(recipient_mailbox)
+        .subject(&params.subject)
+        .header(ContentType::TEXT_PLAIN)
+        .body(params.body.clone())
+        .map_err(|e| AppError::Vault(format!("Errore composizione messaggio: {}", e)))?;
+
+    // 3. Risoluzione parametri SMTP
+    let smtp_host = vault.manifest.smtp_server.clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| {
+            if let Some(ref imap) = vault.manifest.imap_server {
+                imap.replace("imap.", "smtp.").replace("imaps.", "smtps.")
+            } else {
+                let domain = sender.split('@').nth(1).unwrap_or("localhost");
+                format!("mail.{}", domain)
+            }
+        });
+
+    let smtp_port = vault.manifest.smtp_port.unwrap_or(if vault.manifest.is_pec { 465 } else { 587 });
+
+    // 4. Recupero password dal Portachiavi
+    let password = keyring::Entry::new("AP_Mail", &sender)
+        .and_then(|e| e.get_password())
+        .unwrap_or_default();
+
+    let creds = Credentials::new(sender.clone(), password);
+
+    // 5. Configurazione trasporto SMTP
+    let mailer: AsyncSmtpTransport<Tokio1Executor> = if smtp_port == 465 {
+        AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)
+            .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))?
+            .port(smtp_port)
+            .credentials(creds)
+            .build()
+    } else {
+        AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp_host)
+            .map_err(|e| AppError::Vault(format!("Configurazione SMTP non valida ({}): {}", smtp_host, e)))?
+            .port(smtp_port)
+            .credentials(creds)
+            .build()
+    };
+
+    // 6. TRASMISSIONE REALE VIA RETE
+    mailer.send(email).await
+        .map_err(|e| AppError::Vault(format!("Errore invio SMTP su {}:{}: {}", smtp_host, smtp_port, e)))?;
+
+    // 7. Salvataggio locale nel Vault CAS e nel DB solo DOPO avvenuta spedizione
     let raw_eml = format!(
         "From: {}\r\nTo: {}\r\nSubject: {}\r\nDate: {}\r\nMessage-ID: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}",
         sender, params.to, params.subject, date_utc, message_id, params.body
