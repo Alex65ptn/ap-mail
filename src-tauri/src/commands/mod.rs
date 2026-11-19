@@ -49,6 +49,7 @@ pub async fn list_workspaces(state: State<'_, AppState>) -> Result<Vec<Workspace
             let p = entry.path();
             if p.is_dir() && p.join("manifest.json").exists() {
                 if let Ok(vault) = VaultContainer::from_existing(p) {
+                    list.push(vault.manifest.clone());
                     state.register_vault(vault.manifest.workspace_id.clone(), Arc::new(vault));
                 }
             }
