@@ -1014,19 +1014,19 @@ pub async fn get_messages_keyset(
     while let Some(row) = rows.next()? {
         items.push(MessageSummary {
             id: row.get(0)?,
-            folder_id: row.get(1)?,
-            message_id: row.get(2)?,
-            subject: row.get(3)?,
-            sender_name: row.get(4)?,
-            from_addr: row.get(5)?,
-            date_utc: row.get(6)?,
-            snippet: row.get(7)?,
-            has_attachments: row.get(8)?,
-            is_read: row.get(9)?,
-            is_flagged: row.get(10)?,
-            is_pec: row.get(11)?,
-            pec_type: row.get(12)?,
-            pec_identificativo: row.get(13)?,
+            folder_id: row.get(1).unwrap_or(1),
+            message_id: row.get::<_, Option<String>>(2).ok().flatten().unwrap_or_default(),
+            subject: row.get::<_, Option<String>>(3).ok().flatten().unwrap_or_default(),
+            sender_name: row.get::<_, Option<String>>(4).ok().flatten(),
+            from_addr: row.get::<_, Option<String>>(5).ok().flatten().unwrap_or_else(|| "sconosciuto".to_string()),
+            date_utc: row.get::<_, Option<String>>(6).ok().flatten().unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+            snippet: row.get::<_, Option<String>>(7).ok().flatten(),
+            has_attachments: row.get(8).unwrap_or(false),
+            is_read: row.get(9).unwrap_or(true),
+            is_flagged: row.get(10).unwrap_or(false),
+            is_pec: row.get(11).unwrap_or(false),
+            pec_type: row.get::<_, Option<String>>(12).ok().flatten().unwrap_or_else(|| "NONE".to_string()),
+            pec_identificativo: row.get::<_, Option<String>>(13).ok().flatten(),
         });
     }
 
