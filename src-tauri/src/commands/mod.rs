@@ -39,6 +39,43 @@ pub struct KeysetCursor {
     pub id: i64,
 }
 
+pub fn get_keyring_password(email: &str) -> Option<String> {
+    if email.trim().is_empty() {
+        return None;
+    }
+    // 1. Prova con il valore esatto
+    if let Ok(entry) = keyring::Entry::new("AP_Mail", email) {
+        if let Ok(pwd) = entry.get_password() {
+            if !pwd.trim().is_empty() {
+                return Some(pwd);
+            }
+        }
+    }
+    // 2. Prova con la versione minuscola
+    let lower = email.to_lowercase();
+    if lower != email {
+        if let Ok(entry) = keyring::Entry::new("AP_Mail", &lower) {
+            if let Ok(pwd) = entry.get_password() {
+                if !pwd.trim().is_empty() {
+                    return Some(pwd);
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn set_keyring_password(email: &str, pwd: &str) {
+    if email.trim().is_empty() || pwd.trim().is_empty() {
+        return;
+    }
+    let _ = keyring::Entry::new("AP_Mail", email).map(|e| e.set_password(pwd));
+    let lower = email.to_lowercase();
+    if lower != email {
+        let _ = keyring::Entry::new("AP_Mail", &lower).map(|e| e.set_password(pwd));
+    }
+}
+
 #[tauri::command]
 pub async fn list_workspaces(state: State<'_, AppState>) -> Result<Vec<WorkspaceManifest>> {
     let data_root = state.get_data_root();
@@ -144,10 +181,10 @@ pub async fn update_workspace_settings(
 ) -> Result<bool> {
     let data_root = state.get_data_root();
     
-    // Se è stata indicata una nuova password, salvala nel Keyring di sistema
+    // Se è stata indicata una nuova password, salvala nel Keyring di sistema (sia esatta che lowercase)
     if let Some(pwd) = &params.password {
         if !pwd.trim().is_empty() {
-            let _ = keyring::Entry::new("AP_Mail", &params.email_address).map(|e| e.set_password(pwd));
+            set_keyring_password(&params.email_address, pwd);
         }
     }
 
@@ -209,7 +246,6 @@ pub async fn send_or_save_email(
     use lettre::message::header::ContentType;
     use lettre::message::Mailbox;
     use lettre::transport::smtp::authentication::Credentials;
-    use lettre::transport::smtp::client::{Tls, TlsParameters};
     use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 
     let vault = state.get_vault(&params.workspace_id)?;
@@ -249,9 +285,13 @@ pub async fn send_or_save_email(
     let smtp_port = vault.manifest.smtp_port.unwrap_or(if vault.manifest.is_pec { 465 } else { 587 });
 
     // 4. Recupero password dal Portachiavi di sistema
-    let password = keyring::Entry::new("AP_Mail", &sender)
-        .and_then(|e| e.get_password())
-        .unwrap_or_default();
+    let password = get_keyring_password(&sender).unwrap_or_default();
+    if password.trim().is_empty() {
+        return Err(AppError::Vault(format!(
+            "Nessuna password salvata nel Portachiavi per '{}'. Clicca sull'icona ⚙️ Impostazioni accanto alla casella, inserisci la password nel campo 'Nuova Password' e clicca 'Salva Impostazioni'.",
+            sender
+        )));
+    }
 
     let primary_user = vault.manifest.smtp_username.clone()
         .filter(|u| !u.trim().is_empty())
@@ -284,27 +324,63 @@ pub async fn send_or_save_email(
         }
     };
 
-    // 5. Tentativo di invio con l'utente primario
-    let mailer = build_transport(&primary_user, &password)?;
-    let send_result = mailer.send(email.clone()).await;
+    // 5. Costruzione della lista dei tentativi utente (multi-fallback intelligente per Linux/Postfix/Dovecot)
+    let mut candidates: Vec<String> = Vec::new();
+    let mut add_cand = |cand: &str| {
+        let c = cand.trim().to_string();
+        if !c.is_empty() && !candidates.contains(&c) {
+            candidates.push(c);
+        }
+    };
 
-    // Se l'autenticazione fallisce (535) e l'username conteneva '@', tenta automaticamente con il solo nome utente locale (es. "admin")
-    if let Err(e) = send_result {
-        let err_str = e.to_string();
-        if (err_str.contains("535") || err_str.contains("authentication failed")) && primary_user.contains('@') {
-            let local_user = primary_user.split('@').next().unwrap_or(&primary_user);
-            if let Ok(retry_mailer) = build_transport(local_user, &password) {
-                if let Err(retry_err) = retry_mailer.send(email).await {
-                    return Err(AppError::Vault(format!(
-                        "Autenticazione SMTP fallita (535) su {}:{}. Il server ha rifiutato sia '{}' che '{}'. Controlla la password o imposta il nome utente esatto nelle Impostazioni (⚙️). (Dettaglio: {})",
-                        smtp_host, smtp_port, primary_user, local_user, retry_err
-                    )));
-                }
-            } else {
-                return Err(AppError::Vault(format!("Errore invio SMTP su {}:{}: {}", smtp_host, smtp_port, e)));
+    add_cand(&primary_user);
+    add_cand(&primary_user.to_lowercase());
+    if primary_user.contains('@') {
+        let local_part = primary_user.split('@').next().unwrap_or(&primary_user);
+        add_cand(local_part);
+        add_cand(&local_part.to_lowercase());
+    }
+
+    // 6. Tentativi di invio
+    let mut last_error = None;
+    let mut sent = false;
+
+    for cand_user in &candidates {
+        let mailer = match build_transport(cand_user, &password) {
+            Ok(m) => m,
+            Err(e) => {
+                last_error = Some(e.to_string());
+                break;
             }
+        };
+
+        match mailer.send(email.clone()).await {
+            Ok(_) => {
+                sent = true;
+                break;
+            }
+            Err(e) => {
+                let err_str = e.to_string();
+                last_error = Some(err_str.clone());
+                // Se l'errore non è un problema di credenziali (535 o authentication failed),
+                // interrompi per non insistere su errori di rete o timeout
+                if !err_str.contains("535") && !err_str.contains("authentication failed") {
+                    break;
+                }
+            }
+        }
+    }
+
+    if !sent {
+        let err_desc = last_error.unwrap_or_else(|| "Errore sconosciuto".to_string());
+        if err_desc.contains("535") || err_desc.contains("authentication failed") {
+            let tried_users = candidates.join("', '");
+            return Err(AppError::Vault(format!(
+                "Autenticazione SMTP fallita (535) su {}:{}. Il server ha rifiutato tutti i formati utente tentati: ['{}']. Controlla che la password sia corretta o imposta il nome utente esatto nelle Impostazioni (⚙️). (Dettaglio: {})",
+                smtp_host, smtp_port, tried_users, err_desc
+            )));
         } else {
-            return Err(AppError::Vault(format!("Errore invio SMTP su {}:{}: {}", smtp_host, smtp_port, e)));
+            return Err(AppError::Vault(format!("Errore invio SMTP su {}:{}: {}", smtp_host, smtp_port, err_desc)));
         }
     }
 
@@ -665,8 +741,8 @@ pub async fn add_imap_account(
         imap_port,
     ).await;
 
-    // Salva la password in modo sicuro nel Keyring nativo dell'OS
-    let _ = keyring::Entry::new("AP_Mail", &email_address).map(|e| e.set_password(&password));
+    // Salva la password in modo sicuro nel Keyring nativo dell'OS (sia esatta che lowercase)
+    set_keyring_password(&email_address, &password);
 
     let data_root = state.get_data_root();
 
@@ -752,9 +828,13 @@ pub async fn sync_workspace_now(
 
     if is_pop3 {
         let sender = vault.manifest.email_address.clone().unwrap_or_default();
-        let password = keyring::Entry::new("AP_Mail", &sender)
-            .and_then(|e| e.get_password())
-            .unwrap_or_default();
+        let password = get_keyring_password(&sender).unwrap_or_default();
+        if password.trim().is_empty() {
+            return Err(AppError::Vault(format!(
+                "Nessuna password trovata nel Portachiavi per '{}'. Clicca sull'icona ⚙️ Impostazioni accanto alla casella, inserisci la password nel campo 'Nuova Password' e clicca 'Salva Impostazioni'.",
+                sender
+            )));
+        }
 
         let host = vault.manifest.pop3_server.clone()
             .or_else(|| vault.manifest.imap_server.clone())
@@ -769,29 +849,59 @@ pub async fn sync_workspace_now(
 
         let use_tls = port == 995;
 
-        let mut client = crate::pop3::client::Pop3Client::connect(&host, port, use_tls).await?;
-        
         let username = vault.manifest.smtp_username.clone()
             .filter(|u| !u.trim().is_empty())
             .unwrap_or_else(|| sender.clone());
 
-        // Login con fallback se fallisce
-        if let Err(e) = client.login(&username, &password).await {
-            if username.contains('@') {
-                let local_user = username.split('@').next().unwrap_or(&username);
-                let mut retry_client = crate::pop3::client::Pop3Client::connect(&host, port, use_tls).await?;
-                if let Err(retry_e) = retry_client.login(local_user, &password).await {
-                    return Err(AppError::Vault(format!(
-                        "Autenticazione POP3 fallita su {}:{}: {}", host, port, retry_e
-                    )));
+        // Multi-fallback per autenticazione POP3 (esatta, lowercase, locale, locale lowercase)
+        let mut candidates: Vec<String> = Vec::new();
+        let mut add_cand = |cand: &str| {
+            let c = cand.trim().to_string();
+            if !c.is_empty() && !candidates.contains(&c) {
+                candidates.push(c);
+            }
+        };
+        add_cand(&username);
+        add_cand(&username.to_lowercase());
+        if username.contains('@') {
+            let local_part = username.split('@').next().unwrap_or(&username);
+            add_cand(local_part);
+            add_cand(&local_part.to_lowercase());
+        }
+
+        let mut logged_in_client = None;
+        let mut last_pop_err = None;
+
+        for cand_user in &candidates {
+            match crate::pop3::client::Pop3Client::connect(&host, port, use_tls).await {
+                Ok(mut c) => {
+                    match c.login(cand_user, &password).await {
+                        Ok(_) => {
+                            logged_in_client = Some(c);
+                            break;
+                        }
+                        Err(e) => {
+                            last_pop_err = Some(e.to_string());
+                        }
+                    }
                 }
-                client = retry_client;
-            } else {
-                return Err(AppError::Vault(format!(
-                    "Autenticazione POP3 fallita su {}:{}: {}", host, port, e
-                )));
+                Err(e) => {
+                    return Err(AppError::Vault(format!("Connessione POP3 fallita verso {}:{}: {}", host, port, e)));
+                }
             }
         }
+
+        let mut client = match logged_in_client {
+            Some(c) => c,
+            None => {
+                let err_desc = last_pop_err.unwrap_or_else(|| "Credenziali respinte".to_string());
+                let tried_users = candidates.join("', '");
+                return Err(AppError::Vault(format!(
+                    "Autenticazione POP3 fallita su {}:{}. Il server ha rifiutato: ['{}']. (Dettaglio: {})",
+                    host, port, tried_users, err_desc
+                )));
+            }
+        };
 
         // Recupera lista UIDL dal server POP3
         let uidl_list = client.get_uidl_list().await?;
