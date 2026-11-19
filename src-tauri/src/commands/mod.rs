@@ -255,17 +255,91 @@ pub async fn get_message_details(
     })
 }
 
+#[derive(Debug, Serialize)]
+pub struct ServerDetectionResult {
+    pub server: String,
+    pub port: u16,
+    pub is_pec: bool,
+    pub provider_name: String,
+}
+
+#[tauri::command]
+pub async fn auto_detect_server(email: String) -> ServerDetectionResult {
+    let lower = email.to_lowercase();
+    if lower.contains("pec.it") || lower.contains("arubapec") {
+        ServerDetectionResult {
+            server: "imaps.pec.aruba.it".to_string(),
+            port: 993,
+            is_pec: true,
+            provider_name: "Aruba PEC".to_string(),
+        }
+    } else if lower.contains("legalmail") {
+        ServerDetectionResult {
+            server: "mail.legalmail.it".to_string(),
+            port: 993,
+            is_pec: true,
+            provider_name: "Legalmail (InfoCert)".to_string(),
+        }
+    } else if lower.contains("postecert") {
+        ServerDetectionResult {
+            server: "mail.postecert.it".to_string(),
+            port: 993,
+            is_pec: true,
+            provider_name: "PosteCert".to_string(),
+        }
+    } else if lower.contains("sicurezzapostale") {
+        ServerDetectionResult {
+            server: "imap.sicurezzapostale.it".to_string(),
+            port: 993,
+            is_pec: true,
+            provider_name: "Namirial PEC".to_string(),
+        }
+    } else if lower.contains("gmail.com") {
+        ServerDetectionResult {
+            server: "imap.gmail.com".to_string(),
+            port: 993,
+            is_pec: false,
+            provider_name: "Gmail".to_string(),
+        }
+    } else if let Some((_, domain)) = lower.split_once('@') {
+        let (working_server, port) = crate::imap::auto_auth::AutoDiscovery::discover_working_server(&lower, &format!("mail.{}", domain), 993).await;
+        ServerDetectionResult {
+            server: working_server,
+            port,
+            is_pec: false,
+            provider_name: format!("Server {}", domain),
+        }
+    } else {
+        ServerDetectionResult {
+            server: "mail.verindex.org".to_string(),
+            port: 993,
+            is_pec: false,
+            provider_name: "IMAP Standard".to_string(),
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn add_imap_account(
     state: State<'_, AppState>,
     name: String,
     email_address: String,
-    _password: String,
-    _imap_server: String,
-    _imap_port: u16,
+    password: String,
+    imap_server: String,
+    imap_port: u16,
     is_pec: bool,
     auto_delete_on_server: bool,
 ) -> Result<String> {
+    // Scoperta automatica del server funzionante
+    let (_detected_server, _detected_port) = crate::imap::auto_auth::AutoDiscovery::discover_working_server(
+        &email_address,
+        &imap_server,
+        imap_port,
+    ).await;
+
+    // Salva la password in modo sicuro nel Keyring nativo dell'OS
+    let _ = keyring::Entry::new("AP_Mail", &email_address).map(|e| e.set_password(&password));
+
     let data_root = state.get_data_root();
     let schema_sql = include_str!("../../migrations/schema.sql");
     let workspace_id = uuid::Uuid::new_v4().to_string();
@@ -274,7 +348,7 @@ pub async fn add_imap_account(
     let manifest = WorkspaceManifest {
         version: 1,
         workspace_id: workspace_id.clone(),
-        name: name.clone(),
+        name: if name.trim().is_empty() { email_address.clone() } else { name.clone() },
         workspace_type: WorkspaceType::ImapAttivo,
         email_address: Some(email_address.clone()),
         created_at_epoch: chrono::Utc::now().timestamp(),

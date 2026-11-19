@@ -38,6 +38,30 @@ export const AddAccountModal: React.FC<Props> = ({ isOpen, onClose, onSuccess })
 
   if (!isOpen) return null;
 
+  const handleEmailChange = async (val: string) => {
+    setEmailAddress(val);
+    if (val.includes('@') && val.includes('.')) {
+      try {
+        const detection: any = await invoke('auto_detect_server', { email: val });
+        if (detection && detection.server) {
+          setImapServer(detection.server);
+          setImapPort(detection.port);
+          setIsPec(detection.is_pec);
+          setSelectedPreset(detection.provider_name);
+          if (!accountName) {
+            setAccountName(val.split('@')[0]);
+          }
+        }
+      } catch (e) {
+        // Fallback automatico
+        const domain = val.split('@')[1];
+        if (domain) {
+          setImapServer(`mail.${domain}`);
+        }
+      }
+    }
+  };
+
   const handleSelectPreset = (p: ProviderPreset) => {
     setSelectedPreset(p.name);
     setImapServer(p.server);
@@ -153,7 +177,7 @@ export const AddAccountModal: React.FC<Props> = ({ isOpen, onClose, onSuccess })
                     type="email"
                     required
                     value={emailAddress}
-                    onChange={(e) => setEmailAddress(e.target.value)}
+                    onChange={(e) => handleEmailChange(e.target.value)}
                     placeholder="avvocato@pec.it"
                     className="w-full pl-8 pr-3 py-2 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white transition-colors"
                   />
@@ -260,7 +284,7 @@ export const AddAccountModal: React.FC<Props> = ({ isOpen, onClose, onSuccess })
               disabled={isSubmitting}
               className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-xl text-xs flex items-center space-x-2 shadow-sm transition-all disabled:opacity-50"
             >
-              <span>{isSubmitting ? 'Verifica Connessione...' : 'Collega & Sincronizza'}</span>
+              <span>{isSubmitting ? 'Autenticazione automatica in corso...' : 'Collega & Sincronizza'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

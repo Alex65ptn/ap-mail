@@ -2,6 +2,7 @@ pub mod error;
 pub mod models;
 pub mod vault;
 pub mod pec;
+pub mod imap;
 pub mod state;
 pub mod commands;
 
@@ -28,6 +29,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_workspaces,
+            commands::auto_detect_server,
             commands::add_imap_account,
             commands::list_folders,
             commands::get_messages_keyset,
