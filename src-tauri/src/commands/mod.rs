@@ -231,6 +231,303 @@ pub async fn update_workspace_settings(
 }
 
 #[derive(Debug, Deserialize)]
+pub struct TestConnectionParams {
+    pub email_address: String,
+    pub password: Option<String>,
+    pub incoming_protocol: String,
+    pub incoming_server: String,
+    pub incoming_port: u16,
+    pub outgoing_server: String,
+    pub outgoing_port: u16,
+    pub outgoing_username: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConnectionTestStep {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConnectionTestReport {
+    pub incoming: ConnectionTestStep,
+    pub outgoing: ConnectionTestStep,
+}
+
+async fn test_pop3(
+    host: &str,
+    port: u16,
+    user: &str,
+    pwd: Option<&str>,
+) -> ConnectionTestStep {
+    let use_tls = port == 995;
+    let connect_res = tokio::time::timeout(
+        std::time::Duration::from_secs(6),
+        crate::pop3::client::Pop3Client::connect(host, port, use_tls),
+    ).await;
+
+    let mut client = match connect_res {
+        Ok(Ok(c)) => c,
+        Ok(Err(e)) => return ConnectionTestStep {
+            success: false,
+            message: format!("Impossibile connettersi al server POP3 {}:{}: {}", host, port, e),
+        },
+        Err(_) => return ConnectionTestStep {
+            success: false,
+            message: format!("Timeout connessione POP3 verso {}:{}. Verifica host o firewall/router.", host, port),
+        },
+    };
+
+    if let Some(password) = pwd {
+        if !password.trim().is_empty() {
+            let mut candidates = Vec::new();
+            let mut add_cand = |c: &str| {
+                let trimmed = c.trim().to_string();
+                if !trimmed.is_empty() && !candidates.contains(&trimmed) {
+                    candidates.push(trimmed);
+                }
+            };
+            add_cand(user);
+            add_cand(&user.to_lowercase());
+            if user.contains('@') {
+                let loc = user.split('@').next().unwrap_or(user);
+                add_cand(loc);
+                add_cand(&loc.to_lowercase());
+            }
+
+            let mut last_err = None;
+            for (idx, cand) in candidates.iter().enumerate() {
+                if idx > 0 {
+                    match crate::pop3::client::Pop3Client::connect(host, port, use_tls).await {
+                        Ok(new_c) => client = new_c,
+                        Err(e) => {
+                            last_err = Some(e.to_string());
+                            break;
+                        }
+                    }
+                }
+
+                match client.login(cand, password).await {
+                    Ok(_) => {
+                        let _ = client.quit().await;
+                        return ConnectionTestStep {
+                            success: true,
+                            message: format!("Server POP3 OK ({}:{}) - Accesso riuscito come '{}'", host, port, cand),
+                        };
+                    }
+                    Err(e) => {
+                        last_err = Some(e.to_string());
+                    }
+                }
+            }
+
+            let err_desc = last_err.unwrap_or_else(|| "Credenziali rifiutate".to_string());
+            return ConnectionTestStep {
+                success: false,
+                message: format!("Server POP3 {}:{} raggiungibile ma autenticazione fallita per ['{}']. ({})", host, port, candidates.join("', '"), err_desc),
+            };
+        }
+    }
+
+    let _ = client.quit().await;
+    ConnectionTestStep {
+        success: true,
+        message: format!("Server POP3 {}:{} raggiungibile (porta aperta)", host, port),
+    }
+}
+
+async fn test_imap(
+    host: &str,
+    port: u16,
+    _user: &str,
+    _pwd: Option<&str>,
+) -> ConnectionTestStep {
+    let addr = format!("{}:{}", host, port);
+    let connect_res = tokio::time::timeout(
+        std::time::Duration::from_secs(6),
+        tokio::net::TcpStream::connect(&addr),
+    ).await;
+
+    match connect_res {
+        Ok(Ok(_stream)) => ConnectionTestStep {
+            success: true,
+            message: format!("Server IMAP {}:{} raggiungibile (porta aperta)", host, port),
+        },
+        Ok(Err(e)) => ConnectionTestStep {
+            success: false,
+            message: format!("Impossibile connettersi al server IMAP {}:{}: {}", host, port, e),
+        },
+        Err(_) => ConnectionTestStep {
+            success: false,
+            message: format!("Timeout connessione IMAP verso {}:{}. Verifica porte o Port Forwarding.", host, port),
+        },
+    }
+}
+
+async fn test_smtp(
+    host: &str,
+    port: u16,
+    user: &str,
+    pwd: Option<&str>,
+) -> ConnectionTestStep {
+    if host.trim().is_empty() {
+        return ConnectionTestStep {
+            success: false,
+            message: "Host SMTP non configurato".to_string(),
+        };
+    }
+
+    let password = pwd.unwrap_or_default();
+    if password.trim().is_empty() {
+        let addr = format!("{}:{}", host, port);
+        match tokio::time::timeout(std::time::Duration::from_secs(5), tokio::net::TcpStream::connect(&addr)).await {
+            Ok(Ok(_)) => return ConnectionTestStep {
+                success: true,
+                message: format!("Porta SMTP {}:{} aperta (inserisci la password per testare l'autenticazione)", host, port),
+            },
+            Ok(Err(e)) => return ConnectionTestStep {
+                success: false,
+                message: format!("Impossibile connettersi a {}:{}: {}", host, port, e),
+            },
+            Err(_) => return ConnectionTestStep {
+                success: false,
+                message: format!("Timeout connessione SMTP verso {}:{}. Controlla il Port Forwarding.", host, port),
+            },
+        }
+    }
+
+    let mut candidates = Vec::new();
+    let mut add_cand = |c: &str| {
+        let trimmed = c.trim().to_string();
+        if !trimmed.is_empty() && !candidates.contains(&trimmed) {
+            candidates.push(trimmed);
+        }
+    };
+    add_cand(user);
+    add_cand(&user.to_lowercase());
+    if user.contains('@') {
+        let loc = user.split('@').next().unwrap_or(user);
+        add_cand(loc);
+        add_cand(&loc.to_lowercase());
+    }
+
+    let is_ip = host.parse::<std::net::IpAddr>().is_ok();
+    let mut last_err = None;
+
+    for cand in &candidates {
+        let creds = lettre::transport::smtp::authentication::Credentials::new(
+            cand.clone(),
+            password.to_string(),
+        );
+
+        let builder_res = if port == 465 {
+            if is_ip {
+                Ok(lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::builder_dangerous(host)
+                    .port(port)
+                    .credentials(creds)
+                    .build())
+            } else {
+                lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::relay(host)
+                    .map(|b| b.port(port).credentials(creds).build::<lettre::Tokio1Executor>())
+                    .map_err(|e| e.to_string())
+            }
+        } else {
+            if is_ip {
+                Ok(lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::builder_dangerous(host)
+                    .port(port)
+                    .credentials(creds)
+                    .build())
+            } else {
+                lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::starttls_relay(host)
+                    .map(|b| b.port(port).credentials(creds).build::<lettre::Tokio1Executor>())
+                    .map_err(|e| e.to_string())
+            }
+        };
+
+        let mailer = match builder_res {
+            Ok(m) => m,
+            Err(e) => {
+                last_err = Some(e);
+                break;
+            }
+        };
+
+        match tokio::time::timeout(std::time::Duration::from_secs(6), mailer.test_connection()).await {
+            Ok(Ok(true)) => {
+                return ConnectionTestStep {
+                    success: true,
+                    message: format!("Server SMTP OK ({}:{}) - Autenticazione riuscita come '{}'", host, port, cand),
+                };
+            }
+            Ok(Ok(false)) => {
+                last_err = Some("Test connessione non andato a buon fine".to_string());
+            }
+            Ok(Err(e)) => {
+                let err_str = e.to_string();
+                last_err = Some(err_str.clone());
+                if !err_str.contains("535") && !err_str.contains("authentication failed") {
+                    break;
+                }
+            }
+            Err(_) => {
+                last_err = Some(format!("Timeout connessione SMTP verso {}:{}", host, port));
+                break;
+            }
+        }
+    }
+
+    let err_desc = last_err.unwrap_or_else(|| "Errore sconosciuto".to_string());
+    ConnectionTestStep {
+        success: false,
+        message: format!("Test SMTP fallito su {}:{}. Dettaglio: {}", host, port, err_desc),
+    }
+}
+
+#[tauri::command]
+pub async fn test_mail_connection(
+    params: TestConnectionParams,
+) -> Result<ConnectionTestReport> {
+    // 1. Risoluzione password: da input utente oppure dal Portachiavi
+    let password = params.password
+        .filter(|p| !p.trim().is_empty())
+        .or_else(|| get_keyring_password(&params.email_address));
+
+    // 2. Test posta in entrata (IMAP o POP3)
+    let incoming = if params.incoming_protocol.to_uppercase() == "POP3" {
+        test_pop3(
+            &params.incoming_server,
+            params.incoming_port,
+            &params.email_address,
+            password.as_deref(),
+        ).await
+    } else {
+        test_imap(
+            &params.incoming_server,
+            params.incoming_port,
+            &params.email_address,
+            password.as_deref(),
+        ).await
+    };
+
+    // 3. Test posta in uscita (SMTP)
+    let smtp_user = params.outgoing_username
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or_else(|| params.email_address.clone());
+
+    let outgoing = test_smtp(
+        &params.outgoing_server,
+        params.outgoing_port,
+        &smtp_user,
+        password.as_deref(),
+    ).await;
+
+    Ok(ConnectionTestReport {
+        incoming,
+        outgoing,
+    })
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SendEmailParams {
     pub workspace_id: String,
     pub to: String,
@@ -392,8 +689,10 @@ pub async fn send_or_save_email(
 
     let blob = vault.cas.store_bytes(raw_eml.as_bytes(), "eml")?;
 
+    let _ = conn.execute("INSERT OR IGNORE INTO folders (id, remote_name, display_name) VALUES (2, 'Sent', 'Posta Inviata')", []);
+
     let sent_folder_id: i64 = conn.query_row(
-        "SELECT id FROM folders WHERE remote_name = 'Sent' OR display_name = 'Posta inviata' LIMIT 1",
+        "SELECT id FROM folders WHERE remote_name = 'Sent' OR display_name LIKE '%Inviata%' OR display_name LIKE '%inviata%' LIMIT 1",
         [],
         |r| r.get(0),
     ).unwrap_or(2);
@@ -445,13 +744,10 @@ pub async fn save_draft_email(
 
     let blob = vault.cas.store_bytes(raw_eml.as_bytes(), "eml")?;
 
-    conn.execute(
-        "INSERT OR IGNORE INTO folders (remote_name, display_name) VALUES ('Drafts', 'Bozze')",
-        [],
-    )?;
+    let _ = conn.execute("INSERT OR IGNORE INTO folders (id, remote_name, display_name) VALUES (3, 'Drafts', 'Bozze')", []);
 
     let draft_folder_id: i64 = conn.query_row(
-        "SELECT id FROM folders WHERE remote_name = 'Drafts' OR display_name = 'Bozze' LIMIT 1",
+        "SELECT id FROM folders WHERE remote_name = 'Drafts' OR display_name LIKE '%Bozze%' OR display_name LIKE '%bozze%' LIMIT 1",
         [],
         |r| r.get(0),
     ).unwrap_or(3);
@@ -497,7 +793,25 @@ pub async fn list_folders(state: State<'_, AppState>, workspace_id: String) -> R
     let vault = state.get_vault(&workspace_id)?;
     let conn = vault.get_connection()?;
 
-    let mut stmt = conn.prepare("SELECT id, remote_name, display_name, parent_id, unread_count, total_count FROM folders ORDER BY id ASC")?;
+    // Assicura che le 5 cartelle canoniche esistano sempre
+    let _ = conn.execute("INSERT OR IGNORE INTO folders (id, remote_name, display_name) VALUES (1, 'INBOX', 'In arrivo')", []);
+    let _ = conn.execute("INSERT OR IGNORE INTO folders (id, remote_name, display_name) VALUES (2, 'Sent', 'Posta Inviata')", []);
+    let _ = conn.execute("INSERT OR IGNORE INTO folders (id, remote_name, display_name) VALUES (3, 'Drafts', 'Bozze')", []);
+    let _ = conn.execute("INSERT OR IGNORE INTO folders (id, remote_name, display_name) VALUES (4, 'Trash', 'Cestino')", []);
+    let _ = conn.execute("INSERT OR IGNORE INTO folders (id, remote_name, display_name) VALUES (5, 'Archive', 'Archivio')", []);
+
+    // Calcolo dinamico in tempo reale di messaggi non letti e conteggio totale
+    let sql = "SELECT 
+            f.id, 
+            f.remote_name, 
+            f.display_name, 
+            f.parent_id,
+            (SELECT COUNT(*) FROM messages m WHERE m.folder_id = f.id AND (m.is_read = 0 OR m.is_read IS NULL)) AS unread_count,
+            (SELECT COUNT(*) FROM messages m WHERE m.folder_id = f.id) AS total_count
+        FROM folders f
+        ORDER BY f.id ASC";
+
+    let mut stmt = conn.prepare(sql)?;
     let folders = stmt.query_map([], |row| {
         Ok(FolderDto {
             id: row.get(0)?,

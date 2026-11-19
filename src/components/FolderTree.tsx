@@ -98,19 +98,37 @@ export const FolderTree: React.FC<Props> = ({ onOpenCompose, onOpenSettings, onR
 
       {/* Lista Cartelle */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-1">
-        <button
-          onClick={() => setActiveFolder(null)}
-          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-            activeFolderId === null
-              ? 'bg-amber-500/10 text-amber-900 font-semibold border border-amber-500/20 shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <div className="flex items-center space-x-2.5">
-            <Inbox className={`w-4 h-4 ${activeFolderId === null ? 'text-amber-800' : 'text-slate-500'}`} />
-            <span>Tutti i Messaggi</span>
-          </div>
-        </button>
+        {(() => {
+          const grandTotal = folders.reduce((sum, f) => sum + (f.total_count || 0), 0);
+          const grandUnread = folders.reduce((sum, f) => sum + (f.unread_count || 0), 0);
+          return (
+            <button
+              onClick={() => setActiveFolder(null)}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                activeFolderId === null
+                  ? 'bg-amber-500/10 text-amber-900 font-semibold border border-amber-500/20 shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Inbox className={`w-4 h-4 ${activeFolderId === null ? 'text-amber-800' : 'text-slate-500'}`} />
+                <span>Tutti i Messaggi</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                {grandUnread > 0 && (
+                  <span className="text-[10px] font-bold bg-amber-500 text-slate-950 rounded-full px-1.5 py-0.2 shadow-xs">
+                    {grandUnread}
+                  </span>
+                )}
+                {grandTotal > 0 && (
+                  <span className={`text-[10px] font-medium ${activeFolderId === null ? 'text-amber-800/80 font-semibold' : 'text-slate-400'}`}>
+                    {grandTotal}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })()}
 
         {folders.map((f) => {
           const isSelected = activeFolderId === f.id;
@@ -128,11 +146,18 @@ export const FolderTree: React.FC<Props> = ({ onOpenCompose, onOpenSettings, onR
                 {getFolderIcon(f.name, isSelected)}
                 <span className="truncate">{f.display_name || f.name}</span>
               </div>
-              {f.unread_count > 0 && (
-                <span className="ml-2 text-[10px] font-bold bg-amber-500 text-slate-950 rounded-full px-1.5 py-0.2 shadow-xs">
-                  {f.unread_count}
-                </span>
-              )}
+              <div className="flex items-center space-x-1.5">
+                {f.unread_count > 0 && (
+                  <span className="text-[10px] font-bold bg-amber-500 text-slate-950 rounded-full px-1.5 py-0.2 shadow-xs">
+                    {f.unread_count}
+                  </span>
+                )}
+                {f.total_count > 0 && (
+                  <span className={`text-[10px] font-medium ${isSelected ? 'text-amber-800/80 font-semibold' : 'text-slate-400'}`}>
+                    {f.total_count}
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}

@@ -13,7 +13,7 @@ import { AccountSettingsModal } from './components/AccountSettingsModal';
 import { RefreshCw, UserPlus, PenSquare } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { setWorkspaces, setActiveWorkspace, activeWorkspaceId, setFolders } = useWorkspaceStore();
+  const { setWorkspaces, setActiveWorkspace, activeWorkspaceId, setFolders, triggerRefresh } = useWorkspaceStore();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
@@ -65,6 +65,7 @@ export const App: React.FC = () => {
     try {
       await invoke('sync_workspace_now', { workspaceId: activeWorkspaceId });
       await loadFolders();
+      triggerRefresh();
     } catch (e) {
       console.error('Errore sincronizzazione:', e);
     } finally {

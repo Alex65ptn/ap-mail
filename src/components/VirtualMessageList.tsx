@@ -3,18 +3,30 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { MessageItem } from '../types/mail';
-import { Paperclip, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Paperclip, ShieldAlert, ShieldCheck, Inbox, FileText } from 'lucide-react';
 
 export const VirtualMessageList: React.FC = () => {
-  const { activeWorkspaceId, activeFolderId, searchQuery, selectedMessage, setSelectedMessage } = useWorkspaceStore();
+  const { 
+    activeWorkspaceId, 
+    activeFolderId, 
+    searchQuery, 
+    selectedMessage, 
+    setSelectedMessage,
+    refreshCounter,
+    folders,
+  } = useWorkspaceStore();
   const parentRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
 
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
+  const currentFolder = folders.find((f) => f.id === activeFolderId);
+
   const fetchMessages = useCallback(async (isReset = false) => {
-    if (!activeWorkspaceId || loading) return;
+    if (!activeWorkspaceId || loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
 
     try {
@@ -34,13 +46,14 @@ export const VirtualMessageList: React.FC = () => {
     } catch (err) {
       console.error('Errore recupero messaggi:', err);
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
-  }, [activeWorkspaceId, activeFolderId, searchQuery, messages, loading]);
+  }, [activeWorkspaceId, activeFolderId, searchQuery, messages]);
 
   useEffect(() => {
     fetchMessages(true);
-  }, [activeWorkspaceId, activeFolderId, searchQuery]);
+  }, [activeWorkspaceId, activeFolderId, searchQuery, refreshCounter]);
 
   const rowVirtualizer = useVirtualizer({
     count: hasMore ? messages.length + 1 : messages.length,
@@ -48,6 +61,28 @@ export const VirtualMessageList: React.FC = () => {
     estimateSize: () => 84,
     overscan: 10,
   });
+
+  if (!loading && messages.length === 0) {
+    return (
+      <div className="w-88 border-r border-slate-200/80 h-full flex flex-col items-center justify-center p-6 text-center bg-slate-50/40 select-none">
+        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-700 mb-3 shadow-xs">
+          {currentFolder?.name.toLowerCase().includes('draft') || currentFolder?.name.toLowerCase().includes('bozz') ? (
+            <FileText className="w-6 h-6" />
+          ) : (
+            <Inbox className="w-6 h-6" />
+          )}
+        </div>
+        <div className="text-xs font-bold text-slate-800">
+          {currentFolder ? `Nessun messaggio in "${currentFolder.display_name || currentFolder.name}"` : 'Nessun messaggio presente'}
+        </div>
+        <p className="text-[11px] text-slate-400 mt-1 max-w-[200px] leading-relaxed">
+          {currentFolder?.name.toLowerCase().includes('draft') || currentFolder?.name.toLowerCase().includes('bozz')
+            ? 'I messaggi salvati come bozza compariranno qui.'
+            : 'I messaggi scaricati via POP3/IMAP o inviati compariranno qui.'}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div ref={parentRef} className="w-88 border-r border-slate-200/80 h-full overflow-y-auto bg-white divide-y divide-slate-100 select-none">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { Settings, ShieldCheck, Mail, Lock, Server, X, AlertCircle, CheckCircle2, Trash2, Send } from 'lucide-react';
+import { Settings, ShieldCheck, Mail, Lock, Server, X, AlertCircle, CheckCircle2, Trash2, Send, Activity, RefreshCw } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -34,6 +34,11 @@ export const AccountSettingsModal: React.FC<Props> = ({
   const [autoDeleteOnServer, setAutoDeleteOnServer] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    incoming: { success: boolean; message: string };
+    outgoing: { success: boolean; message: string };
+  } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -55,10 +60,44 @@ export const AccountSettingsModal: React.FC<Props> = ({
       setAutoDeleteOnServer(currentWs.auto_delete_on_server || false);
       setErrorMsg(null);
       setSuccessMsg(null);
+      setTestResult(null);
     }
   }, [currentWs, isOpen]);
 
   if (!isOpen || !currentWs) return null;
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    setErrorMsg(null);
+
+    const activeIncomingServer = incomingProtocol === 'POP3' 
+      ? (pop3Server.trim() || (emailAddress ? `pop.${emailAddress.split('@')[1]}` : ''))
+      : (imapServer.trim() || (emailAddress ? `mail.${emailAddress.split('@')[1]}` : ''));
+    const activeIncomingPort = incomingProtocol === 'POP3' ? Number(pop3Port) : Number(imapPort);
+    const activeOutgoingServer = smtpServer.trim() || (emailAddress ? `mail.${emailAddress.split('@')[1]}` : '');
+    const activeOutgoingPort = Number(smtpPort);
+
+    try {
+      const res: any = await invoke('test_mail_connection', {
+        params: {
+          email_address: emailAddress.trim(),
+          password: password.trim() ? password.trim() : null,
+          incoming_protocol: incomingProtocol,
+          incoming_server: activeIncomingServer,
+          incoming_port: activeIncomingPort,
+          outgoing_server: activeOutgoingServer,
+          outgoing_port: activeOutgoingPort,
+          outgoing_username: smtpUsername.trim() ? smtpUsername.trim() : null,
+        },
+      });
+      setTestResult(res);
+    } catch (err: any) {
+      setErrorMsg(typeof err === 'string' ? err : err?.message || 'Errore durante il test di connessione.');
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -368,6 +407,61 @@ export const AccountSettingsModal: React.FC<Props> = ({
             </label>
           </div>
 
+          {/* Card Esito Test Connessione */}
+          {testResult && (
+            <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2 text-xs animate-in fade-in">
+              <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center space-x-1.5">
+                  <Activity className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Esito Test Connessione</span>
+                </span>
+                <span className="text-[10px] font-normal text-slate-400">Verificato adesso</span>
+              </div>
+              
+              {/* Esito Ricezione (POP3 / IMAP) */}
+              <div className={`p-2.5 rounded-lg border flex items-start space-x-2.5 ${
+                testResult.incoming.success 
+                  ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900' 
+                  : 'bg-rose-50/90 border-rose-200 text-rose-900'
+              }`}>
+                {testResult.incoming.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <div className="font-semibold text-[11px] uppercase tracking-wider">
+                    Posta in Entrata ({incomingProtocol})
+                  </div>
+                  <div className="text-[11px] mt-0.5 leading-snug">
+                    {testResult.incoming.message}
+                  </div>
+                </div>
+              </div>
+
+              {/* Esito Invio (SMTP) */}
+              <div className={`p-2.5 rounded-lg border flex items-start space-x-2.5 ${
+                testResult.outgoing.success 
+                  ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900' 
+                  : 'bg-rose-50/90 border-rose-200 text-rose-900'
+              }`}>
+                {testResult.outgoing.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <div className="font-semibold text-[11px] uppercase tracking-wider">
+                    Posta in Uscita (SMTP)
+                  </div>
+                  <div className="text-[11px] mt-0.5 leading-snug">
+                    {testResult.outgoing.message}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Footer Azioni */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <button
@@ -385,6 +479,25 @@ export const AccountSettingsModal: React.FC<Props> = ({
             <div className="flex items-center space-x-2.5">
               <button
                 type="button"
+                onClick={handleTestConnection}
+                disabled={isTesting || isSaving}
+                className="px-3.5 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100/90 border border-amber-300/80 rounded-xl transition-all flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {isTesting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                    <span>Verifica in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    <Activity className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Test Connessione</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={onClose}
                 className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
               >
@@ -392,8 +505,8 @@ export const AccountSettingsModal: React.FC<Props> = ({
               </button>
               <button
                 type="submit"
-                disabled={isSaving}
-                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                disabled={isSaving || isTesting}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
                 {isSaving ? 'Salvataggio...' : 'Salva Impostazioni'}
               </button>

@@ -8,6 +8,7 @@ interface WorkspaceState {
   activeFolderId: number | null;
   selectedMessage: MessageItem | null;
   searchQuery: string;
+  refreshCounter: number;
   
   setWorkspaces: (workspaces: WorkspaceManifest[]) => void;
   setActiveWorkspace: (id: string | null) => void;
@@ -15,6 +16,7 @@ interface WorkspaceState {
   setActiveFolder: (id: number | null) => void;
   setSelectedMessage: (msg: MessageItem | null) => void;
   setSearchQuery: (query: string) => void;
+  triggerRefresh: () => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -24,6 +26,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeFolderId: null,
   selectedMessage: null,
   searchQuery: '',
+  refreshCounter: 0,
 
   setWorkspaces: (workspaces) => set({ workspaces }),
   setActiveWorkspace: (id) => set({ activeWorkspaceId: id, activeFolderId: null, selectedMessage: null }),
@@ -31,4 +34,5 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   setActiveFolder: (id) => set({ activeFolderId: id, selectedMessage: null }),
   setSelectedMessage: (selectedMessage) => set({ selectedMessage }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
+  triggerRefresh: () => set((state) => ({ refreshCounter: state.refreshCounter + 1 })),
 }));

@@ -10,7 +10,7 @@ interface Props {
 }
 
 export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => {
-  const { workspaces, activeWorkspaceId } = useWorkspaceStore();
+  const { workspaces, activeWorkspaceId, triggerRefresh } = useWorkspaceStore();
   const currentWs = workspaces.find((w) => w.workspace_id === activeWorkspaceId);
 
   const [to, setTo] = useState('');
@@ -99,6 +99,7 @@ export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
 
       setDraftSavedToast(true);
       setTimeout(() => setDraftSavedToast(false), 2500);
+      triggerRefresh();
       onSuccess(); // Ricarica cartelle per aggiornare conteggio Bozze
     } catch (err: any) {
       setErrorMsg(typeof err === 'string' ? err : err?.message || 'Errore salvataggio bozza');
@@ -139,6 +140,7 @@ export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
       setTo('');
       setSubject('');
       setBody('');
+      triggerRefresh();
       onSuccess();
       onClose();
     } catch (err: any) {

@@ -34,6 +34,7 @@ pub fn run() {
             commands::add_imap_account,
             commands::delete_workspace,
             commands::update_workspace_settings,
+            commands::test_mail_connection,
             commands::send_or_save_email,
             commands::save_draft_email,
             commands::list_folders,
