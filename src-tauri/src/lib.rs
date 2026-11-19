@@ -28,6 +28,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_workspaces,
+            commands::add_imap_account,
             commands::list_folders,
             commands::get_messages_keyset,
             commands::get_message_details,

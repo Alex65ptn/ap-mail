@@ -255,6 +255,54 @@ pub async fn get_message_details(
 }
 
 #[tauri::command]
+pub async fn add_imap_account(
+    state: State<'_, AppState>,
+    name: String,
+    email_address: String,
+    _password: String,
+    _imap_server: String,
+    _imap_port: u16,
+    is_pec: bool,
+    auto_delete_on_server: bool,
+) -> Result<String> {
+    let data_root = state.get_data_root();
+    let schema_sql = include_str!("../../migrations/schema.sql");
+    let workspace_id = uuid::Uuid::new_v4().to_string();
+    let folder_name = format!("account_{}", workspace_id[0..8].to_string());
+
+    let manifest = WorkspaceManifest {
+        version: 1,
+        workspace_id: workspace_id.clone(),
+        name: name.clone(),
+        workspace_type: WorkspaceType::ImapAttivo,
+        email_address: Some(email_address.clone()),
+        created_at_epoch: chrono::Utc::now().timestamp(),
+        is_pec,
+        auto_delete_on_server,
+    };
+
+    let vault = Arc::new(VaultContainer::open_or_create(&data_root, &folder_name, Some(manifest.clone()), schema_sql)?);
+    
+    // Inizializza cartelle standard
+    let conn = vault.get_connection()?;
+    conn.execute(
+        "INSERT INTO folders (remote_name, display_name) VALUES ('INBOX', 'Posta in arrivo')",
+        [],
+    )?;
+    conn.execute(
+        "INSERT INTO folders (remote_name, display_name) VALUES ('Sent', 'Posta inviata')",
+        [],
+    )?;
+    conn.execute(
+        "INSERT INTO folders (remote_name, display_name) VALUES ('Trash', 'Cestino')",
+        [],
+    )?;
+
+    state.register_vault(workspace_id.clone(), vault);
+    Ok(workspace_id)
+}
+
+#[tauri::command]
 pub async fn sync_workspace_now(
     _state: State<'_, AppState>,
     _workspace_id: String,

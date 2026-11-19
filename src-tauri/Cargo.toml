@@ -39,6 +39,13 @@ uuid = { version = "1", features = ["v4", "serde"] }
 # Error handling
 thiserror = "2.0"
 
+# IMAP & TLS
+async-imap = { version = "0.10", default-features = false, features = ["runtime-tokio"] }
+tokio-rustls = "0.26"
+rustls-native-certs = "0.8"
+futures = "0.3"
+keyring = "3.0"
+
 # Mail & PEC
 mail-parser = "0.11"
 quick-xml = { version = "0.37", features = ["serialize"] }

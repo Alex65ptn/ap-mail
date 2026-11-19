@@ -7,11 +7,13 @@ import { SearchBar } from './components/SearchBar';
 import { VirtualMessageList } from './components/VirtualMessageList';
 import { MessageView } from './components/MessageView';
 import { ImportModal } from './components/ImportModal';
-import { RefreshCw } from 'lucide-react';
+import { AddAccountModal } from './components/AddAccountModal';
+import { RefreshCw, UserPlus } from 'lucide-react';
 
 export const App: React.FC = () => {
   const { setWorkspaces, setActiveWorkspace, activeWorkspaceId, setFolders } = useWorkspaceStore();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const loadWorkspaces = async () => {
@@ -58,27 +60,38 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 select-none">
-      {/* 1. Barra Workspace / Vault (Slack-like) */}
-      <WorkspaceSidebar onOpenImportModal={() => setIsImportModalOpen(true)} />
+    <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900 select-none">
+      {/* 1. Barra Dock Workspace / Vaults */}
+      <WorkspaceSidebar
+        onOpenImportModal={() => setIsImportModalOpen(true)}
+        onOpenAddAccountModal={() => setIsAddAccountModalOpen(true)}
+      />
 
       {/* 2. Barra Albero Cartelle */}
       <FolderTree />
 
-      {/* 3. Colonna Principale: Barra Ricerca + Virtual List + Visualizzatore */}
+      {/* 3. Colonna Principale: Ricerca FTS5 + Virtual List + Visualizzatore Documenti */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Header superiore con Ricerca & Sincronizzazione */}
-        <header className="h-12 border-b border-slate-800 bg-slate-900/60 px-4 flex items-center justify-between">
+        {/* Header Superiore */}
+        <header className="h-13 border-b border-slate-200/80 bg-white/80 backdrop-blur-md px-5 flex items-center justify-between">
           <SearchBar />
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2.5">
+            <button
+              onClick={() => setIsAddAccountModalOpen(true)}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors border border-slate-200"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-slate-600" />
+              <span>Nuova Casella</span>
+            </button>
+
             <button
               onClick={handleSyncNow}
               disabled={isSyncing || !activeWorkspaceId}
               title="Sincronizza IMAP / PEC"
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition-colors border border-slate-700"
+              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-xs"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : 'text-slate-400'}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : 'text-slate-300'}`} />
               <span>{isSyncing ? 'Sincronizzazione...' : 'Sincronizza'}</span>
             </button>
           </div>
@@ -98,6 +111,16 @@ export const App: React.FC = () => {
         onSuccess={() => {
           loadWorkspaces();
           setIsImportModalOpen(false);
+        }}
+      />
+
+      {/* Modale Configurazione Nuova Casella PEC / IMAP */}
+      <AddAccountModal
+        isOpen={isAddAccountModalOpen}
+        onClose={() => setIsAddAccountModalOpen(false)}
+        onSuccess={() => {
+          loadWorkspaces();
+          setIsAddAccountModalOpen(false);
         }}
       />
     </div>

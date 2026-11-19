@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { ImportProgressEvent } from '../types/mail';
-import { HardDriveDownload, CheckCircle2 } from 'lucide-react';
+import { HardDriveDownload, CheckCircle2, X } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -58,38 +58,51 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4 select-none">
-      <div className="bg-slate-900 border border-slate-700/80 w-full max-w-lg rounded-2xl p-6 shadow-2xl">
-        <h2 className="text-base font-bold text-slate-100 flex items-center space-x-2">
-          <HardDriveDownload className="w-5 h-5 text-amber-400" />
-          <span>Importa Archivio Storico (Nuovo Vault)</span>
-        </h2>
+    <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-md flex items-center justify-center z-50 p-4 select-none animate-fadeIn">
+      <div className="bg-white border border-slate-200/80 w-full max-w-lg rounded-2xl p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)]">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-700">
+              <HardDriveDownload className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Importa Archivio Storico</h2>
+              <p className="text-xs text-slate-500">Creazione Contenitore Locale dedicato a zero-RAM</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
         {!isImporting && !progress?.is_completed ? (
-          <div className="mt-4 space-y-4">
+          <div className="space-y-4">
             <div>
-              <label className="text-xs font-semibold text-slate-400">Nome del Vault Archivio</label>
+              <label className="text-xs font-semibold text-slate-600">Nome del Vault Archivio</label>
               <input
                 type="text"
                 value={archiveName}
                 onChange={(e) => setArchiveName(e.target.value)}
-                placeholder="es. Archivio_Storico_2020"
-                className="w-full mt-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-amber-500"
+                placeholder="es. Archivio_Studio_2020"
+                className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:border-amber-500 focus:bg-white transition-colors"
               />
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-400">Formato Archivio</label>
+              <label className="text-xs font-semibold text-slate-600">Formato Archivio</label>
               <div className="grid grid-cols-3 gap-2 mt-1">
                 {(['pst', 'mbox', 'eml_folder'] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => { setSourceType(t); setSourcePath(''); }}
-                    className={`py-2 text-xs font-medium rounded-lg border transition-all ${
+                    className={`py-2 text-xs font-medium rounded-xl border transition-all ${
                       sourceType === t
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-semibold'
-                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                        ? 'bg-amber-50 border-amber-500 text-amber-900 font-semibold shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                   >
                     {t === 'eml_folder' ? 'CARTELLA EML' : t.toUpperCase()}
@@ -99,30 +112,30 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-400">Percorso File / Cartella</label>
+              <label className="text-xs font-semibold text-slate-600">Percorso File / Cartella</label>
               <div className="flex space-x-2 mt-1">
                 <input
                   type="text"
                   readOnly
                   value={sourcePath}
                   placeholder="Seleziona il percorso su disco..."
-                  className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 text-xs"
+                  className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-xs truncate"
                 />
                 <button
                   type="button"
                   onClick={handleSelectFile}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-medium transition-colors"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-medium transition-colors"
                 >
                   Sfoglia
                 </button>
               </div>
             </div>
 
-            <div className="flex justify-end space-x-2 mt-6">
+            <div className="flex justify-end space-x-2.5 pt-4">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs text-slate-400 hover:text-white"
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
               >
                 Annulla
               </button>
@@ -130,20 +143,20 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
                 type="button"
                 onClick={handleStartImport}
                 disabled={!archiveName || !sourcePath}
-                className="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-lg text-xs transition-colors shadow-lg shadow-amber-500/20"
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-medium rounded-xl text-xs transition-colors shadow-sm"
               >
                 Avvia Ingestione Streaming
               </button>
             </div>
           </div>
         ) : (
-          <div className="mt-5 space-y-4">
-            <div className="text-xs text-slate-300 flex justify-between">
-              <span>Cartella: <strong className="text-amber-400">{progress?.current_folder}</strong></span>
+          <div className="space-y-4 py-2">
+            <div className="text-xs text-slate-700 flex justify-between">
+              <span>Cartella: <strong className="text-amber-800 font-mono">{progress?.current_folder}</strong></span>
               <span>Importati: <strong>{progress?.imported_count}</strong></span>
             </div>
 
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
               <div className="bg-amber-500 h-full w-full animate-pulse" />
             </div>
 
@@ -153,8 +166,8 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
             </div>
 
             {progress?.is_completed && (
-              <div className="p-3 bg-emerald-950/40 border border-emerald-800 rounded-lg flex items-center space-x-2 text-emerald-300 text-xs">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-emerald-800 text-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span>Ingestione completata con successo nel nuovo Vault!</span>
               </div>
             )}
@@ -163,7 +176,7 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full mt-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold"
+                className="w-full mt-2 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold"
               >
                 Chiudi
               </button>

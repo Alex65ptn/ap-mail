@@ -6,43 +6,45 @@ export const FolderTree: React.FC = () => {
   const { folders, activeFolderId, setActiveFolder, workspaces, activeWorkspaceId } = useWorkspaceStore();
   const currentWs = workspaces.find((w) => w.workspace_id === activeWorkspaceId);
 
-  const getFolderIcon = (name: string) => {
+  const getFolderIcon = (name: string, isSelected: boolean) => {
     const lower = name.toLowerCase();
-    if (lower.includes('inbox') || lower.includes('arriv')) return <Inbox className="w-4 h-4 text-blue-400" />;
-    if (lower.includes('sent') || lower.includes('inviat')) return <Send className="w-4 h-4 text-emerald-400" />;
-    if (lower.includes('trash') || lower.includes('cestin')) return <Trash2 className="w-4 h-4 text-rose-400" />;
-    if (lower.includes('draft') || lower.includes('bozz')) return <FileText className="w-4 h-4 text-amber-400" />;
-    if (lower.includes('archiv')) return <Archive className="w-4 h-4 text-purple-400" />;
-    return <FolderIcon className="w-4 h-4 text-slate-400" />;
+    const colorClass = isSelected ? 'text-amber-800' : 'text-slate-500';
+    if (lower.includes('inbox') || lower.includes('arriv')) return <Inbox className={`w-4 h-4 ${colorClass}`} />;
+    if (lower.includes('sent') || lower.includes('inviat')) return <Send className={`w-4 h-4 ${colorClass}`} />;
+    if (lower.includes('trash') || lower.includes('cestin')) return <Trash2 className={`w-4 h-4 ${colorClass}`} />;
+    if (lower.includes('draft') || lower.includes('bozz')) return <FileText className={`w-4 h-4 ${colorClass}`} />;
+    if (lower.includes('archiv')) return <Archive className={`w-4 h-4 ${colorClass}`} />;
+    return <FolderIcon className={`w-4 h-4 ${colorClass}`} />;
   };
 
   return (
-    <div className="w-56 bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none">
-      {/* Intestazione Workspace Attivo */}
-      <div className="p-4 border-b border-slate-800">
-        <div className="text-xs font-semibold uppercase text-slate-400 tracking-wider">Workspace</div>
-        <div className="text-sm font-bold text-slate-100 truncate mt-0.5">
+    <div className="w-60 bg-slate-50/80 border-r border-slate-200/80 flex flex-col h-full select-none">
+      {/* Intestazione Account Attivo */}
+      <div className="p-4 border-b border-slate-200/60 bg-white/50">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Casella Attiva</div>
+        <div className="text-xs font-semibold text-slate-900 truncate mt-0.5" title={currentWs?.name}>
           {currentWs ? currentWs.name : 'Nessun Account'}
         </div>
         {currentWs?.is_pec && (
-          <span className="inline-block mt-1 text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded">
-            Posta Certificata
-          </span>
+          <div className="inline-flex items-center space-x-1 mt-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+            <span>Posta Certificata</span>
+          </div>
         )}
       </div>
 
       {/* Lista Cartelle */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-1">
         <button
           onClick={() => setActiveFolder(null)}
-          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
             activeFolderId === null
-              ? 'bg-blue-600/20 text-blue-300 font-semibold border border-blue-500/30'
-              : 'text-slate-300 hover:bg-slate-800/60'
+              ? 'bg-amber-500/10 text-amber-900 font-semibold border border-amber-500/20 shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
           <div className="flex items-center space-x-2.5">
-            <Inbox className="w-4 h-4" />
+            <Inbox className={`w-4 h-4 ${activeFolderId === null ? 'text-amber-800' : 'text-slate-500'}`} />
             <span>Tutti i Messaggi</span>
           </div>
         </button>
@@ -53,18 +55,18 @@ export const FolderTree: React.FC = () => {
             <button
               key={f.id}
               onClick={() => setActiveFolder(f.id)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                 isSelected
-                  ? 'bg-blue-600/20 text-blue-300 font-semibold border border-blue-500/30'
-                  : 'text-slate-300 hover:bg-slate-800/60'
+                  ? 'bg-amber-500/10 text-amber-900 font-semibold border border-amber-500/20 shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
               <div className="flex items-center space-x-2.5 truncate">
-                {getFolderIcon(f.name)}
+                {getFolderIcon(f.name, isSelected)}
                 <span className="truncate">{f.display_name || f.name}</span>
               </div>
               {f.unread_count > 0 && (
-                <span className="ml-2 text-[10px] font-bold bg-blue-500 text-white rounded-full px-1.5 py-0.5">
+                <span className="ml-2 text-[10px] font-bold bg-amber-500 text-slate-950 rounded-full px-1.5 py-0.2 shadow-sm">
                   {f.unread_count}
                 </span>
               )}
