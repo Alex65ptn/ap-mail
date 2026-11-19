@@ -60,15 +60,10 @@ impl VaultContainer {
 
     fn init_database(db_path: &Path, schema_sql: &str) -> Result<()> {
         let conn = Connection::open(db_path)?;
-        conn.execute_batch(
-            "
-            PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = FULL;
-            PRAGMA foreign_keys = ON;
-            PRAGMA page_size = 4096;
-            PRAGMA temp_store = MEMORY;
-            ",
-        )?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "FULL")?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.execute_batch(schema_sql)?;
         Ok(())
     }
@@ -76,13 +71,9 @@ impl VaultContainer {
     pub fn get_connection(&self) -> Result<Connection> {
         let db_path = self.root_path.join("index.db");
         let conn = Connection::open(db_path)?;
-        conn.execute_batch(
-            "
-            PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = FULL;
-            PRAGMA foreign_keys = ON;
-            ",
-        )?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "FULL")?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
         Ok(conn)
     }
 }

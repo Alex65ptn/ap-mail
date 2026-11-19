@@ -286,15 +286,15 @@ pub async fn add_imap_account(
     // Inizializza cartelle standard
     let conn = vault.get_connection()?;
     conn.execute(
-        "INSERT INTO folders (remote_name, display_name) VALUES ('INBOX', 'Posta in arrivo')",
+        "INSERT OR IGNORE INTO folders (remote_name, display_name) VALUES ('INBOX', 'Posta in arrivo')",
         [],
     )?;
     conn.execute(
-        "INSERT INTO folders (remote_name, display_name) VALUES ('Sent', 'Posta inviata')",
+        "INSERT OR IGNORE INTO folders (remote_name, display_name) VALUES ('Sent', 'Posta inviata')",
         [],
     )?;
     conn.execute(
-        "INSERT INTO folders (remote_name, display_name) VALUES ('Trash', 'Cestino')",
+        "INSERT OR IGNORE INTO folders (remote_name, display_name) VALUES ('Trash', 'Cestino')",
         [],
     )?;
 
