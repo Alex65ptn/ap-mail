@@ -21,20 +21,14 @@ tauri-plugin-fs = "2.0"
 
 # Async Runtime
 tokio = { version = "1.40", features = ["full"] }
-futures = "0.3"
 
 # Database SQLite & FTS5
 rusqlite = { version = "0.32", features = ["bundled", "bundled-full", "chrono", "serde_json"] }
-r2d2 = "0.8"
-r2d2_sqlite = "0.25"
 
 # Crittografia, Hashing & Content-Addressable Storage
 sha2 = "0.10"
 hex = "0.4"
 tempfile = "3.13"
-
-# Keyring nativo per password IMAP / PEC
-keyring = "3.0"
 
 # Serializzazione e date
 serde = { version = "1.0", features = ["derive"] }
@@ -42,28 +36,14 @@ serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Error handling
 thiserror = "2.0"
-anyhow = "1.0"
 
 # Mail & PEC
-async-imap = { version = "0.10", default-features = false, features = ["runtime-tokio"] }
-tokio-rustls = "0.26"
-rustls-native-certs = "0.8"
 mail-parser = "0.11"
 quick-xml = { version = "0.37", features = ["serialize"] }
 cms = "0.2"
 der = "0.7"
-x509-cert = "0.2"
-
-# Document extraction & FTS5
-pdf-extract = "0.7"
-calamine = "0.26"
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
-regex = "1.11"
-walkdir = "2.5"
 
 [profile.release]
 lto = true
