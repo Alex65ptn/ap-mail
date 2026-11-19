@@ -38,6 +38,7 @@ export const AddAccountModal: React.FC<Props> = ({ isOpen, onClose, onSuccess })
   const [testResult, setTestResult] = useState<{
     incoming: { success: boolean; message: string };
     outgoing: { success: boolean; message: string };
+    logs: Array<{ timestamp: string; section: string; level: string; text: string }>;
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -303,56 +304,92 @@ export const AddAccountModal: React.FC<Props> = ({ isOpen, onClose, onSuccess })
             </label>
           </div>
 
-          {/* Card Esito Test Connessione */}
+          {/* Card Esito Test Connessione & Console Dettagliata */}
           {testResult && (
-            <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2 text-xs animate-in fade-in">
-              <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center justify-between">
-                <span className="flex items-center space-x-1.5">
-                  <Activity className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Esito Test Connessione</span>
-                </span>
-                <span className="text-[10px] font-normal text-slate-400">Verificato adesso</span>
+            <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden space-y-0 text-xs animate-in fade-in">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center space-x-2">
+                  <Activity className="w-4 h-4 text-amber-600" />
+                  <span>Esito Test Connessione & Diagnostica di Rete</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] font-medium text-slate-500">Completato</span>
+                </div>
               </div>
-              
-              <div className={`p-2.5 rounded-lg border flex items-start space-x-2.5 ${
-                testResult.incoming.success 
-                  ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900' 
-                  : 'bg-rose-50/90 border-rose-200 text-rose-900'
-              }`}>
-                {testResult.incoming.success ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                )}
-                <div className="flex-1">
-                  <div className="font-semibold text-[11px] uppercase tracking-wider">
-                    Posta in Entrata (IMAP)
+
+              {/* Box Riassuntivi */}
+              <div className="p-3 grid grid-cols-2 gap-2 bg-slate-50/50">
+                <div className={`p-2.5 rounded-lg border flex items-start space-x-2 ${
+                  testResult.incoming.success 
+                    ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900' 
+                    : 'bg-rose-50/90 border-rose-200 text-rose-900'
+                }`}>
+                  {testResult.incoming.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-[10px] uppercase tracking-wider">
+                      Ricezione (IMAP)
+                    </div>
+                    <div className="text-[11px] mt-0.5 leading-snug line-clamp-2" title={testResult.incoming.message}>
+                      {testResult.incoming.message}
+                    </div>
                   </div>
-                  <div className="text-[11px] mt-0.5 leading-snug">
-                    {testResult.incoming.message}
+                </div>
+
+                <div className={`p-2.5 rounded-lg border flex items-start space-x-2 ${
+                  testResult.outgoing.success 
+                    ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900' 
+                    : 'bg-rose-50/90 border-rose-200 text-rose-900'
+                }`}>
+                  {testResult.outgoing.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-[10px] uppercase tracking-wider">
+                      Invio (SMTP)
+                    </div>
+                    <div className="text-[11px] mt-0.5 leading-snug line-clamp-2" title={testResult.outgoing.message}>
+                      {testResult.outgoing.message}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className={`p-2.5 rounded-lg border flex items-start space-x-2.5 ${
-                testResult.outgoing.success 
-                  ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900' 
-                  : 'bg-rose-50/90 border-rose-200 text-rose-900'
-              }`}>
-                {testResult.outgoing.success ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                )}
-                <div className="flex-1">
-                  <div className="font-semibold text-[11px] uppercase tracking-wider">
-                    Posta in Uscita (SMTP)
+              {/* Console di Rete Monospace */}
+              {testResult.logs && testResult.logs.length > 0 && (
+                <div className="border-t border-slate-200 bg-slate-950 p-3 font-mono text-[10px] leading-relaxed max-h-48 overflow-y-auto select-text">
+                  <div className="text-slate-400 font-bold mb-1.5 flex items-center justify-between border-b border-slate-800 pb-1">
+                    <span>LOG DI RETE DETTAGLIATO (Socket & Protocolli)</span>
+                    <span className="text-slate-500">{testResult.logs.length} passaggi</span>
                   </div>
-                  <div className="text-[11px] mt-0.5 leading-snug">
-                    {testResult.outgoing.message}
+                  <div className="space-y-1">
+                    {testResult.logs.map((log, idx) => (
+                      <div key={idx} className="flex items-start space-x-2">
+                        <span className="text-slate-500 shrink-0">[{log.timestamp}]</span>
+                        <span className={`shrink-0 font-bold ${
+                          log.section === 'RICEZIONE' ? 'text-cyan-400' :
+                          log.section === 'INVIO SMTP' ? 'text-amber-400' : 'text-purple-400'
+                        }`}>
+                          [{log.section}]
+                        </span>
+                        <span className={`flex-1 break-all ${
+                          log.level === 'SUCCESS' ? 'text-emerald-400 font-medium' :
+                          log.level === 'ERROR' ? 'text-rose-400 font-semibold' :
+                          log.level === 'WARN' ? 'text-amber-300' : 'text-slate-300'
+                        }`}>
+                          {log.text}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
