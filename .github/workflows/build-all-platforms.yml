@@ -25,7 +25,7 @@ jobs:
             args: '--bundles deb,appimage'
           - platform: 'macos-latest'
             name: 'macOS Apple Silicon & Intel (.dmg)'
-            args: '--bundles dmg,app'
+            args: '--bundles dmg'
 
     runs-on: ${{ matrix.platform }}
     steps:
