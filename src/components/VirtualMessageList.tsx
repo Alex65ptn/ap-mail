@@ -5,7 +5,6 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { MessageItem } from '../types/mail';
 import { 
   Paperclip, 
-  ShieldAlert, 
   ShieldCheck, 
   Inbox, 
   Send, 
@@ -14,16 +13,53 @@ import {
   Trash2, 
   Mail, 
   AlertOctagon, 
-  ExternalLink,
   Circle,
-  Filter
+  Columns,
+  Rows
 } from 'lucide-react';
 
 type FilterTag = 'all' | 'unread' | 'read' | 'pec' | 'attachments';
 type SortField = 'date' | 'sender' | 'size' | 'read_status';
 type SortDirection = 'desc' | 'asc';
 
-export const VirtualMessageList: React.FC = () => {
+interface Props {
+  layoutMode?: 'classic' | 'split';
+  onToggleLayout?: () => void;
+}
+
+export const formatAppleMailDate = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  const timeStr = `${hours}:${minutes}`;
+
+  if (isToday) {
+    return timeStr; // Es: 16:46, 16:36 identico ad Apple Mail
+  }
+  if (isYesterday) {
+    return `Ieri ${timeStr}`;
+  }
+  
+  if (d.getFullYear() === now.getFullYear()) {
+    const day = d.getDate();
+    const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+    return `${day} ${months[d.getMonth()]} ${timeStr}`; // Es: 19 nov 16:12
+  }
+  
+  return `${d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} ${timeStr}`;
+};
+
+export const VirtualMessageList: React.FC<Props> = ({ layoutMode = 'classic', onToggleLayout }) => {
   const { 
     activeWorkspaceId, 
     activeFolderId, 
@@ -313,266 +349,324 @@ export const VirtualMessageList: React.FC = () => {
   }, [processedMessages, selectedMessage]);
 
   return (
-    <div className="w-[390px] min-w-[390px] max-w-[390px] shrink-0 border-r border-slate-200/80 h-full flex flex-col bg-white select-none">
+    <div className={`h-full flex flex-col bg-white select-none ${layoutMode === 'classic' ? 'w-full' : 'w-[390px] min-w-[390px] max-w-[390px] shrink-0 border-r border-slate-200/80'}`}>
       
-      {/* 1. Header Intestazione Cartella con Contatore Totale Reale e Scorciatoie Tastiera */}
-      <div className="px-3.5 py-2.5 border-b border-slate-200/80 bg-slate-50/90 flex items-center justify-between shrink-0">
+      {/* 1. Header Intestazione Cartella con Contatore Reale, Filtri e Switcher Layout */}
+      <div className="px-3.5 py-2 border-b border-slate-200/80 bg-slate-50/90 flex items-center justify-between shrink-0 gap-2">
         <div className="flex items-center space-x-2 min-w-0">
           {currentFolder ? getFolderIcon(currentFolder.name) : <Inbox className="w-4 h-4 text-amber-600" />}
           <span className="font-bold text-xs text-slate-900 truncate">
-            {currentFolder ? (currentFolder.display_name || currentFolder.name) : 'Tutti i Messaggi'}
+            {currentFolder ? (currentFolder.display_name || currentFolder.name) : 'In entrata (tutte)'}
+          </span>
+          <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-full font-mono shrink-0">
+            {processedMessages.length} messaggi
           </span>
         </div>
-        <div className="flex items-center space-x-1.5 shrink-0">
-          <span className="text-[9px] text-slate-400 font-medium mr-1 hidden sm:inline" title="Usa frecce su/giù per scorrere e segnare come letto al volo">
-            ↑/↓ scorri • ↵ apri
-          </span>
-          <span className="text-[10px] font-bold text-slate-700 bg-white border border-slate-200/90 px-2 py-0.5 rounded-full shadow-2xs font-mono">
-            {processedMessages.length} di {messages.length}
-          </span>
-        </div>
-      </div>
 
-      {/* 2. Barra Filtri Rapidi di Stato stile Outlook (Pills) */}
-      <div className="px-2.5 py-1.5 bg-slate-50/60 border-b border-slate-200/60 flex items-center space-x-1 overflow-x-auto no-scrollbar shrink-0 text-[10px]">
-        <button
-          onClick={() => setActiveFilter('all')}
-          className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer whitespace-nowrap ${
-            activeFilter === 'all'
-              ? 'bg-amber-500 text-slate-950 shadow-2xs'
-              : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200/80'
-          }`}
-        >
-          Tutte ({messages.length})
-        </button>
+        {/* Barra Filtri Rapidi (Tutte, Non lette, PEC, Allegati) */}
+        <div className="flex items-center space-x-1 text-[10px] shrink-0">
+          <button
+            onClick={() => setActiveFilter('all')}
+            className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer ${
+              activeFilter === 'all'
+                ? 'bg-amber-500 text-slate-950 font-bold shadow-2xs'
+                : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+            }`}
+          >
+            Tutte
+          </button>
 
-        <button
-          onClick={() => setActiveFilter('unread')}
-          className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer whitespace-nowrap flex items-center space-x-1 ${
-            activeFilter === 'unread'
-              ? 'bg-blue-600 text-white shadow-2xs'
-              : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200/80'
-          }`}
-        >
-          <Circle className="w-2 h-2 fill-current text-blue-500" />
-          <span>Non lette</span>
-          {unreadCount > 0 && (
-            <span className={`ml-0.5 text-[9px] px-1 rounded-full font-bold ${activeFilter === 'unread' ? 'bg-blue-700 text-white' : 'bg-blue-100 text-blue-800'}`}>
-              {unreadCount}
-            </span>
+          <button
+            onClick={() => setActiveFilter('unread')}
+            className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer flex items-center space-x-1 ${
+              activeFilter === 'unread'
+                ? 'bg-blue-600 text-white font-bold shadow-2xs'
+                : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+            }`}
+          >
+            <Circle className="w-2 h-2 fill-current text-blue-500" />
+            <span>Non lette</span>
+            {unreadCount > 0 && <span className="font-bold">({unreadCount})</span>}
+          </button>
+
+          <button
+            onClick={() => setActiveFilter('pec')}
+            className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer flex items-center space-x-1 ${
+              activeFilter === 'pec'
+                ? 'bg-amber-600 text-white font-bold shadow-2xs'
+                : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-2.5 h-2.5 text-amber-500" />
+            <span>PEC</span>
+            {pecCount > 0 && <span>({pecCount})</span>}
+          </button>
+
+          <button
+            onClick={() => setActiveFilter('attachments')}
+            className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer flex items-center space-x-1 ${
+              activeFilter === 'attachments'
+                ? 'bg-slate-800 text-white font-bold shadow-2xs'
+                : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+            }`}
+          >
+            <Paperclip className="w-2.5 h-2.5" />
+            <span>Allegati</span>
+            {attachmentsCount > 0 && <span>({attachmentsCount})</span>}
+          </button>
+
+          {/* Tasto Cambio Layout (Apple Mail Colonne vs 3 Colonne) */}
+          {onToggleLayout && (
+            <button
+              onClick={onToggleLayout}
+              title={layoutMode === 'classic' ? 'Passa alla visualizzazione a 3 colonne verticali' : 'Passa alla visualizzazione a colonne Apple Mail (Elenco sopra, Anteprima sotto)'}
+              className="ml-1 p-1 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded cursor-pointer transition-colors"
+            >
+              {layoutMode === 'classic' ? <Columns className="w-3.5 h-3.5 text-slate-700" /> : <Rows className="w-3.5 h-3.5 text-amber-600" />}
+            </button>
           )}
-        </button>
-
-        <button
-          onClick={() => setActiveFilter('pec')}
-          className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer whitespace-nowrap flex items-center space-x-1 ${
-            activeFilter === 'pec'
-              ? 'bg-amber-600 text-white shadow-2xs'
-              : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200/80'
-          }`}
-        >
-          <ShieldCheck className="w-2.5 h-2.5 text-amber-500" />
-          <span>PEC ({pecCount})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveFilter('attachments')}
-          className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer whitespace-nowrap flex items-center space-x-1 ${
-            activeFilter === 'attachments'
-              ? 'bg-slate-800 text-white shadow-2xs'
-              : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200/80'
-          }`}
-        >
-          <Paperclip className="w-2.5 h-2.5" />
-          <span>Allegati ({attachmentsCount})</span>
-        </button>
+        </div>
       </div>
 
-      {/* 3. Barra Ordinamento Istantaneo stile Outlook a 4 Bottoni dedicati */}
-      <div className="px-2.5 py-1.5 bg-white border-b border-slate-100 flex items-center justify-between text-[10px] text-slate-600 shrink-0 gap-1 overflow-x-auto no-scrollbar">
-        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-0.5">Ordina:</span>
-        
-        {/* Tasto Data */}
-        <button
-          onClick={() => handleSortClick('date')}
-          title="Ordina per data di ricezione (clicca per invertire più recente / meno recente)"
-          className={`px-2 py-1 rounded-md font-bold flex items-center space-x-0.5 transition-all cursor-pointer whitespace-nowrap ${
-            sortField === 'date'
-              ? 'bg-slate-900 text-white shadow-2xs'
-              : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/70'
-          }`}
-        >
-          <span>Data</span>
-          <span className="text-amber-400 font-extrabold">{sortField === 'date' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</span>
-        </button>
-
-        {/* Tasto Provenienza A-Z */}
-        <button
-          onClick={() => handleSortClick('sender')}
-          title="Ordina alfabeticamente per mittente/provenienza (clicca per invertire A-Z / Z-A)"
-          className={`px-2 py-1 rounded-md font-bold flex items-center space-x-0.5 transition-all cursor-pointer whitespace-nowrap ${
-            sortField === 'sender'
-              ? 'bg-slate-900 text-white shadow-2xs'
-              : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/70'
-          }`}
-        >
-          <span>Da: {sortField === 'sender' ? (sortDir === 'asc' ? 'A→Z' : 'Z→A') : 'A-Z'}</span>
-          <span className="text-amber-400 font-extrabold">{sortField === 'sender' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}</span>
-        </button>
-
-        {/* Tasto Dimensione File */}
-        <button
-          onClick={() => handleSortClick('size')}
-          title="Ordina per dimensione del messaggio/allegati (clicca per invertire più pesante / più leggero)"
-          className={`px-2 py-1 rounded-md font-bold flex items-center space-x-0.5 transition-all cursor-pointer whitespace-nowrap ${
-            sortField === 'size'
-              ? 'bg-slate-900 text-white shadow-2xs'
-              : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/70'
-          }`}
-        >
-          <span>Dimensione</span>
-          <span className="text-amber-400 font-extrabold">{sortField === 'size' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</span>
-        </button>
-
-        {/* Tasto Non Lette in cima */}
-        <button
-          onClick={() => handleSortClick('read_status')}
-          title="Porta tutte le email non lette in cima alla lista"
-          className={`px-2 py-1 rounded-md font-bold flex items-center space-x-0.5 transition-all cursor-pointer whitespace-nowrap ${
-            sortField === 'read_status'
-              ? 'bg-blue-600 text-white shadow-2xs'
-              : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/70'
-          }`}
-        >
-          <span>Non lette</span>
-          {sortField === 'read_status' && <span className="text-white font-extrabold"> ↑</span>}
-        </button>
-      </div>
-
-      {/* 4. Corpo Lista Messaggi con Riconoscimento Tag, Provenienza e Dimensione */}
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-        {loading && messages.length === 0 ? (
-          <div className="h-48 flex items-center justify-center text-xs text-slate-400 font-medium">
-            Caricamento messaggi in corso...
-          </div>
-        ) : processedMessages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-slate-50/40">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-700 mb-3 shadow-xs">
-              <Filter className="w-6 h-6" />
+      {/* 2. LAYOUT A COLONNE APPLE MAIL (Stile nativo macOS dello screenshot) */}
+      {layoutMode === 'classic' ? (
+        <div className="flex-1 flex flex-col min-h-0 bg-white">
+          {/* Header Tabella Colonne Apple Mail */}
+          <div className="flex items-center px-4 py-1.5 bg-slate-100/90 border-b border-slate-200 text-[11px] font-semibold text-slate-600 select-none shrink-0">
+            {/* Colonna Icona Stato */}
+            <div className="w-7 flex items-center justify-center shrink-0 text-slate-400">
+              ⇅
             </div>
-            <div className="text-xs font-bold text-slate-800">
-              Nessun messaggio corrisponde ai criteri
+
+            {/* Colonna Da (Mittente) */}
+            <div 
+              onClick={() => handleSortClick('sender')} 
+              className="w-56 cursor-pointer hover:text-slate-900 flex items-center space-x-1 shrink-0 pr-3"
+              title="Clicca per ordinare alfabeticamente per mittente"
+            >
+              <span>Da</span>
+              {sortField === 'sender' && <span className="text-amber-600 font-extrabold">{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1 max-w-[200px] leading-relaxed">
-              Prova a cambiare il filtro rapido o la chiave di ricerca.
-            </p>
+
+            {/* Colonna Data ricezione (Ordinata per data ora minuto con freccetta) */}
+            <div 
+              onClick={() => handleSortClick('date')} 
+              className="w-40 cursor-pointer hover:text-slate-900 flex items-center space-x-1 shrink-0 pr-3"
+              title="Clicca per ordinare per data, ora e minuto (più recenti in cima)"
+            >
+              <span>Data ricezione</span>
+              <span className="text-slate-900 font-extrabold">{sortField === 'date' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</span>
+            </div>
+
+            {/* Colonna Oggetto */}
+            <div className="flex-1 min-w-0 pr-4">
+              <span>Oggetto</span>
+            </div>
+
+            {/* Colonna Dimensione */}
+            <div 
+              onClick={() => handleSortClick('size')} 
+              className="w-24 text-right pr-2 cursor-pointer hover:text-slate-900 flex items-center justify-end space-x-1 shrink-0"
+              title="Clicca per ordinare per dimensione del messaggio"
+            >
+              <span>Dimensione</span>
+              {sortField === 'size' && <span className="text-amber-600 font-extrabold">{sortDir === 'desc' ? ' ↓' : ' ↑'}</span>}
+            </div>
           </div>
-        ) : (
-          processedMessages.map((msg) => {
-            const isSelected = selectedMessage?.id === msg.id;
-            const sizeStr = formatFileSize(msg.size_bytes);
 
-            return (
-              <div
-                key={msg.id}
-                ref={(el) => {
-                  if (el) itemRefs.current.set(msg.id, el);
-                  else itemRefs.current.delete(msg.id);
-                }}
-                onClick={() => handleSelectMessage(msg)}
-                onDoubleClick={() => handleOpenExternal(msg)}
-                title="Clicca per selezionare. Doppio clic per aprire fuori dal client."
-                className={`group px-3 py-2.5 cursor-pointer flex flex-col justify-between transition-all border-l-3 relative ${
-                  isSelected
-                    ? 'bg-amber-500/[0.09] border-amber-500 shadow-2xs'
-                    : 'hover:bg-slate-50/90 border-transparent'
-                }`}
-              >
-                {/* Riga 1: Tag Letto/Non Letto + Provenienza (Mittente) + Data */}
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <div className="flex items-center space-x-2 min-w-0 flex-1 mr-2">
-                    {/* Tag Interattivo di Lettura: Pallino Blu Cliccabile stile Outlook */}
-                    <button
-                      onClick={(e) => handleToggleRead(msg, e)}
-                      title={msg.is_read ? 'Segna come non letto' : 'Segna come letto'}
-                      className="shrink-0 p-0.5 rounded-full hover:scale-115 transition-transform cursor-pointer"
-                    >
-                      {!msg.is_read ? (
-                        <div className="w-2.5 h-2.5 bg-blue-600 rounded-full shadow-xs ring-2 ring-blue-100" />
-                      ) : (
-                        <div className="w-2.5 h-2.5 rounded-full border border-slate-300 group-hover:border-slate-400 transition-colors" />
-                      )}
-                    </button>
-
-                    {/* Provenienza / Mittente */}
-                    <span className={`truncate text-xs ${!msg.is_read ? 'text-slate-950 font-bold' : 'text-slate-700 font-semibold'}`}>
-                      {msg.sender_name || msg.from_addr}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-1 shrink-0">
-                    <span className="text-slate-400 text-[10px] font-medium group-hover:hidden">
-                      {msg.date_utc ? new Date(msg.date_utc).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : ''}
-                    </span>
-                    <button
-                      onClick={(e) => handleOpenExternal(msg, e)}
-                      title="Apri fuori dal client in finestra nativa"
-                      className="hidden group-hover:flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-white text-[9px] font-bold transition-all shadow-2xs"
-                    >
-                      <ExternalLink className="w-2.5 h-2.5 text-amber-400" />
-                      <span>Apri</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Riga 2: Badge PEC + Oggetto */}
-                <div className="flex items-center space-x-1.5 my-0.5">
-                  {msg.is_pec && (
-                    <span title={`PEC: ${msg.pec_type}`} className="shrink-0">
-                      {msg.pec_type === 'AVVENUTA_CONSEGNA' || msg.pec_type === 'ACCETTAZIONE' ? (
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : msg.pec_type === 'ERRORE_CONSEGNA' ? (
-                        <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                      ) : (
-                        <span className="text-[9px] bg-amber-50 text-amber-800 border border-amber-200/80 font-bold px-1 rounded">PEC</span>
-                      )}
-                    </span>
-                  )}
-
-                  <div className={`text-xs truncate flex-1 ${!msg.is_read ? 'text-slate-950 font-semibold' : 'text-slate-700 font-normal'}`}>
-                    {msg.subject || '(Nessun Oggetto)'}
-                  </div>
-
-                  {msg.has_attachments && <Paperclip className="w-3 h-3 text-slate-400 shrink-0" />}
-                </div>
-
-                {/* Riga 3: Snippet + Dimensione File */}
-                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-0.5">
-                  <span className="truncate flex-1 mr-2 font-normal">
-                    {msg.snippet || 'Nessuna anteprima'}
-                  </span>
-
-                  {/* Tag Dimensione File in font mono */}
-                  {sizeStr && (
-                    <span className="text-[9px] font-mono text-slate-500 bg-slate-100 border border-slate-200/80 px-1 py-0.2 rounded font-semibold shrink-0">
-                      {sizeStr}
-                    </span>
-                  )}
-                </div>
-
-                {/* Etichetta Casella / Workspace */}
-                {msg.workspace_name && (
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="text-[9px] font-medium text-slate-400 bg-slate-50 border border-slate-200/60 px-1.5 py-0.2 rounded truncate max-w-[200px]">
-                      {msg.workspace_name}
-                    </span>
-                  </div>
-                )}
+          {/* Righe Tabella Apple Mail con Selezione Blu e Scroll Fluido */}
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+            {loading && messages.length === 0 ? (
+              <div className="h-28 flex items-center justify-center text-xs text-slate-400 font-medium">
+                Caricamento messaggi in corso...
               </div>
-            );
-          })
-        )}
-      </div>
+            ) : processedMessages.length === 0 ? (
+              <div className="h-32 flex items-center justify-center text-xs text-slate-400 font-medium">
+                Nessun messaggio presente in questa vista.
+              </div>
+            ) : (
+              processedMessages.map((msg) => {
+                const isSelected = selectedMessage?.id === msg.id;
+                const sizeStr = formatFileSize(msg.size_bytes);
+                const dateFormatted = formatAppleMailDate(msg.date_utc);
+
+                return (
+                  <div
+                    key={msg.id}
+                    ref={(el) => {
+                      if (el) itemRefs.current.set(msg.id, el);
+                      else itemRefs.current.delete(msg.id);
+                    }}
+                    onClick={() => handleSelectMessage(msg)}
+                    onDoubleClick={() => handleOpenExternal(msg)}
+                    className={`flex items-center px-4 py-1.5 text-xs cursor-pointer select-none transition-colors group ${
+                      isSelected
+                        ? 'bg-[#005fb8] text-white font-medium'
+                        : !msg.is_read
+                        ? 'bg-white hover:bg-slate-50 text-slate-950 font-bold'
+                        : 'bg-white hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    {/* 1. Icona Stato: Pallino blu se non letto, graffetta se allegato */}
+                    <div className="w-7 flex items-center justify-center shrink-0">
+                      {!msg.is_read ? (
+                        <div className={`w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-600 ring-2 ring-blue-100'}`} />
+                      ) : msg.has_attachments ? (
+                        <Paperclip className={`w-3.5 h-3.5 ${isSelected ? 'text-white/80' : 'text-slate-400'}`} />
+                      ) : (
+                        <span className="w-2.5 h-2.5" />
+                      )}
+                    </div>
+
+                    {/* 2. Mittente (Da) */}
+                    <div className="w-56 truncate pr-3 shrink-0 flex items-center space-x-1.5">
+                      {msg.is_pec && (
+                        <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-300' : 'text-amber-600'}`} />
+                      )}
+                      <span className="truncate">
+                        {msg.sender_name || msg.from_addr}
+                      </span>
+                    </div>
+
+                    {/* 3. Data Ricezione (Ora:Minuto per oggi: 16:46, 16:36, ecc.) */}
+                    <div className={`w-40 shrink-0 text-xs ${isSelected ? 'text-white/90' : 'text-slate-500 font-mono'}`}>
+                      {dateFormatted}
+                    </div>
+
+                    {/* 4. Oggetto */}
+                    <div className="flex-1 min-w-0 truncate pr-4">
+                      <span className="truncate">
+                        {msg.subject || '(Nessun Oggetto)'}
+                      </span>
+                    </div>
+
+                    {/* 5. Dimensione (es. 86 KB, 43 KB) */}
+                    <div className={`w-24 text-right pr-2 shrink-0 font-mono text-[11px] ${isSelected ? 'text-white/90' : 'text-slate-400'}`}>
+                      {sizeStr || '—'}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : (
+        /* 3. LAYOUT A SCHEDE VERTICALI (3 Colonne) */
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Barra Ordinamento Istantaneo */}
+          <div className="px-2.5 py-1.5 bg-white border-b border-slate-100 flex items-center justify-between text-[10px] text-slate-600 shrink-0 gap-1 overflow-x-auto no-scrollbar">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-0.5">Ordina:</span>
+            
+            <button
+              onClick={() => handleSortClick('date')}
+              className={`px-2 py-1 rounded-md font-bold flex items-center space-x-0.5 transition-all cursor-pointer whitespace-nowrap ${
+                sortField === 'date'
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/70'
+              }`}
+            >
+              <span>Data/Ora</span>
+              <span className="text-amber-400 font-extrabold">{sortField === 'date' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</span>
+            </button>
+
+            <button
+              onClick={() => handleSortClick('sender')}
+              className={`px-2 py-1 rounded-md font-bold flex items-center space-x-0.5 transition-all cursor-pointer whitespace-nowrap ${
+                sortField === 'sender'
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/70'
+              }`}
+            >
+              <span>Da: A-Z</span>
+              <span className="text-amber-400 font-extrabold">{sortField === 'sender' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+            </button>
+
+            <button
+              onClick={() => handleSortClick('size')}
+              className={`px-2 py-1 rounded-md font-bold flex items-center space-x-0.5 transition-all cursor-pointer whitespace-nowrap ${
+                sortField === 'size'
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/70'
+              }`}
+            >
+              <span>Dimensione</span>
+              <span className="text-amber-400 font-extrabold">{sortField === 'size' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</span>
+            </button>
+          </div>
+
+          {/* Elenco Schede Verticali */}
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+            {processedMessages.map((msg) => {
+              const isSelected = selectedMessage?.id === msg.id;
+              const sizeStr = formatFileSize(msg.size_bytes);
+              const dateFormatted = formatAppleMailDate(msg.date_utc);
+
+              return (
+                <div
+                  key={msg.id}
+                  ref={(el) => {
+                    if (el) itemRefs.current.set(msg.id, el);
+                    else itemRefs.current.delete(msg.id);
+                  }}
+                  onClick={() => handleSelectMessage(msg)}
+                  onDoubleClick={() => handleOpenExternal(msg)}
+                  className={`group px-3 py-2.5 cursor-pointer flex flex-col justify-between transition-all border-l-3 relative ${
+                    isSelected
+                      ? 'bg-amber-500/[0.09] border-amber-500 shadow-2xs'
+                      : 'hover:bg-slate-50/90 border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <div className="flex items-center space-x-2 min-w-0 flex-1 mr-2">
+                      <button
+                        onClick={(e) => handleToggleRead(msg, e)}
+                        className="shrink-0 p-0.5 rounded-full hover:scale-115 transition-transform cursor-pointer"
+                      >
+                        {!msg.is_read ? (
+                          <div className="w-2.5 h-2.5 bg-blue-600 rounded-full shadow-xs ring-2 ring-blue-100" />
+                        ) : (
+                          <div className="w-2.5 h-2.5 rounded-full border border-slate-300 group-hover:border-slate-400 transition-colors" />
+                        )}
+                      </button>
+
+                      <span className={`truncate text-xs ${!msg.is_read ? 'text-slate-950 font-bold' : 'text-slate-700 font-semibold'}`}>
+                        {msg.sender_name || msg.from_addr}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <span className="text-slate-500 text-[10px] font-mono font-medium">
+                        {dateFormatted}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-1.5 my-0.5">
+                    {msg.is_pec && (
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    )}
+                    <div className={`text-xs truncate flex-1 ${!msg.is_read ? 'text-slate-950 font-semibold' : 'text-slate-700 font-normal'}`}>
+                      {msg.subject || '(Nessun Oggetto)'}
+                    </div>
+                    {msg.has_attachments && <Paperclip className="w-3 h-3 text-slate-400 shrink-0" />}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mt-0.5">
+                    <span className="truncate flex-1 mr-2 font-normal">
+                      {msg.snippet || 'Nessuna anteprima'}
+                    </span>
+                    {sizeStr && (
+                      <span className="text-[9px] font-mono text-slate-500 bg-slate-100 border border-slate-200/80 px-1 py-0.2 rounded font-semibold shrink-0">
+                        {sizeStr}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
     </div>
   );

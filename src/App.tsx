@@ -31,6 +31,7 @@ export const App: React.FC = () => {
 
   const { workspaces, setWorkspaces, setActiveWorkspace, activeWorkspaceId, setFolders, triggerRefresh } = useWorkspaceStore();
   const [activeAppTab, setActiveAppTab] = useState<'mail' | 'calendar'>('mail');
+  const [layoutMode, setLayoutMode] = useState<'classic' | 'split'>('classic');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
@@ -228,17 +229,24 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            {/* Corpo diviso in 2 sezioni: Virtual List a sinistra, Dettaglio Messaggio a destra */}
-            <div className="flex-1 flex overflow-hidden">
-              <VirtualMessageList />
-              <MessageView 
-                onComposeAction={handleOpenCompose} 
-                onAddToCalendar={handleAddToCalendarFromEmail}
-                onOpenLegalSuitePlus={(data) => {
-                  setLegalSuitePreset(data || null);
-                  setIsLegalSuiteModalOpen(true);
-                }}
-              />
+            {/* Corpo con layout configurabile: Classico Apple Mail (Elenco colonne in alto + Anteprima in basso) o 3 Colonne */}
+            <div className={`flex-1 flex overflow-hidden ${layoutMode === 'classic' ? 'flex-col' : 'flex-row'}`}>
+              <div className={`${layoutMode === 'classic' ? 'h-[46%] min-h-[200px] max-h-[70%] border-b border-slate-200/80 flex flex-col' : 'h-full flex'}`}>
+                <VirtualMessageList 
+                  layoutMode={layoutMode} 
+                  onToggleLayout={() => setLayoutMode((prev) => (prev === 'classic' ? 'split' : 'classic'))} 
+                />
+              </div>
+              <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+                <MessageView 
+                  onComposeAction={handleOpenCompose} 
+                  onAddToCalendar={handleAddToCalendarFromEmail}
+                  onOpenLegalSuitePlus={(data) => {
+                    setLegalSuitePreset(data || null);
+                    setIsLegalSuiteModalOpen(true);
+                  }}
+                />
+              </div>
             </div>
           </div>
         </>
