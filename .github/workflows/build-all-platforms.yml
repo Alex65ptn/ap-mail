@@ -21,8 +21,8 @@ jobs:
             name: 'Windows x64 (.exe installer NSIS)'
             args: '--bundles nsis'
           - platform: 'ubuntu-22.04'
-            name: 'Linux x64 (.deb & .AppImage)'
-            args: '--bundles deb,appimage'
+            name: 'Linux x64 (.deb)'
+            args: '--bundles deb'
           - platform: 'macos-latest'
             name: 'macOS Apple Silicon & Intel (.dmg)'
             args: '--bundles dmg'
@@ -81,9 +81,9 @@ jobs:
             - **100% Locale e Confidenziale**
 
             ### Pacchetti Disponibili al Download:
-            - **Windows**: `AP Mail_1.0.0_x64-setup.exe` (Installer NSIS per Windows 10 e 11)
-            - **Linux**: `ap-mail_1.0.0_amd64.deb` (Debian/Ubuntu/Mint) e `AP Mail_1.0.0_amd64.AppImage` (Universale Linux)
-            - **macOS**: `AP Mail_1.0.0_universal.dmg` (Apple Silicon & Intel x86_64)
+            - **Windows**: `AP.Mail_1.0.0_x64-setup.exe` (Installer NSIS per Windows 10 e 11)
+            - **Linux**: `AP.Mail_1.0.0_amd64.deb` (Debian/Ubuntu/Mint)
+            - **macOS**: `AP.Mail_1.0.0_aarch64.dmg` (Apple Silicon M1/M2/M3/M4)
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
