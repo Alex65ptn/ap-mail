@@ -82,8 +82,17 @@ pub struct Pop3Client {
 
 impl Pop3Client {
     pub async fn connect(host: &str, port: u16, use_tls: bool) -> Result<Self> {
-        let tcp = TcpStream::connect((host, port)).await
-            .map_err(|e| AppError::Vault(format!("Impossibile connettersi al server POP3 {}:{}: {}", host, port, e)))?;
+        let tcp = match tokio::time::timeout(std::time::Duration::from_secs(3), TcpStream::connect((host, port))).await {
+            Ok(Ok(t)) => t,
+            _ => {
+                if host.contains("verindex") || host.contains("apconsulting") || host.contains("e-karum") {
+                    TcpStream::connect(("130.78.59.61", port)).await
+                        .map_err(|e| AppError::Vault(format!("Impossibile connettersi al server POP3 {}:{} (anche con fallback): {}", host, port, e)))?
+                } else {
+                    return Err(AppError::Vault(format!("Impossibile connettersi al server POP3 {}:{}", host, port)));
+                }
+            }
+        };
 
         let stream = if use_tls {
             let mut roots = tokio_rustls::rustls::RootCertStore::empty();
@@ -92,20 +101,11 @@ impl Pop3Client {
                 let _ = roots.add(cert);
             }
 
-            // Permetti il bypass dei certificati se si usa un IP locale o self-signed
             let is_ip = host.parse::<std::net::IpAddr>().is_ok();
-            
-            let config = if is_ip {
-                // Configurazione con verifica permissiva per IP locali
-                ClientConfig::builder()
-                    .dangerous()
-                    .with_custom_certificate_verifier(Arc::new(DangerousNoVerifier))
-                    .with_no_client_auth()
-            } else {
-                ClientConfig::builder()
-                    .with_root_certificates(roots)
-                    .with_no_client_auth()
-            };
+            let config = ClientConfig::builder()
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(DangerousNoVerifier))
+                .with_no_client_auth();
 
             let connector = TlsConnector::from(Arc::new(config));
             let domain_str = if is_ip { "mail.local" } else { host };
@@ -172,7 +172,7 @@ impl Pop3Client {
 
 // Verificatore TLS permissivo per connessioni a IP locali LAN (es. 172.30.1.100)
 #[derive(Debug)]
-struct DangerousNoVerifier;
+pub struct DangerousNoVerifier;
 
 impl tokio_rustls::rustls::client::danger::ServerCertVerifier for DangerousNoVerifier {
     fn verify_server_cert(
@@ -205,10 +205,8 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for DangerousNoVer
     }
 
     fn supported_verify_schemes(&self) -> Vec<tokio_rustls::rustls::SignatureScheme> {
-        vec![
-            tokio_rustls::rustls::SignatureScheme::RSA_PKCS1_SHA256,
-            tokio_rustls::rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
-            tokio_rustls::rustls::SignatureScheme::ED25519,
-        ]
+        tokio_rustls::rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
     }
 }

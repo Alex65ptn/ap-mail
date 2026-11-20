@@ -60,10 +60,11 @@ impl VaultContainer {
 
     fn init_database(db_path: &Path, schema_sql: &str) -> Result<()> {
         let conn = Connection::open(db_path)?;
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(10));
         let _: String = conn.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))?;
         conn.execute_batch(
             "
-            PRAGMA synchronous = FULL;
+            PRAGMA synchronous = NORMAL;
             PRAGMA foreign_keys = ON;
             PRAGMA temp_store = MEMORY;
             ",
@@ -75,10 +76,11 @@ impl VaultContainer {
     pub fn get_connection(&self) -> Result<Connection> {
         let db_path = self.root_path.join("index.db");
         let conn = Connection::open(db_path)?;
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(10));
         let _: String = conn.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))?;
         conn.execute_batch(
             "
-            PRAGMA synchronous = FULL;
+            PRAGMA synchronous = NORMAL;
             PRAGMA foreign_keys = ON;
             ",
         )?;

@@ -1,0 +1,78 @@
+name: "Compilazione Multipiattaforma AP Mail (Windows, Linux, macOS)"
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            name: 'Windows x64 (.exe installer NSIS)'
+            args: ''
+          - platform: 'ubuntu-22.04'
+            name: 'Linux x64 (.deb & .AppImage)'
+            args: ''
+          - platform: 'macos-latest'
+            name: 'macOS Apple Silicon & Intel (.dmg)'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux System Dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            build-essential \
+            curl \
+            wget \
+            file
+
+      - name: Install NPM Dependencies
+        run: npm install
+
+      - name: Build Tauri Package
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'AP Mail v__VERSION__ - Client Email & PEC Forense'
+          releaseBody: |
+            ## AP Mail - Client Email & PEC Forense
+            **Prodotto di:** AP Consulting
+            **Autore:** Alessandro Patanè
+
+            ### Pacchetti Disponibili al Download:
+            - **Windows**: `AP Mail_1.0.0_x64-setup.exe` (Installer NSIS con certificazione e supporto offline)
+            - **Linux**: `ap-mail_1.0.0_amd64.deb` (Debian/Ubuntu/Mint) e `AP Mail_1.0.0_amd64.AppImage` (Universale per tutte le distribuzioni)
+            - **macOS**: `AP Mail_1.0.0_universal.dmg` (Compatibile con Apple Silicon M1/M2/M3/M4 e Mac Intel)
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

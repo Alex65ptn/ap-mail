@@ -51,6 +51,9 @@ export interface MessageItem {
   is_pec: boolean;
   pec_type: PecType;
   pec_identificativo?: string;
+  workspace_id?: string;
+  workspace_name?: string;
+  size_bytes?: number;
 }
 
 export interface AttachmentItem {

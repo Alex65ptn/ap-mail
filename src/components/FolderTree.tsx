@@ -1,27 +1,30 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { Folder as FolderIcon, Inbox, Send, Trash2, Archive, FileText, PenSquare, ShieldCheck, Settings } from 'lucide-react';
+import { Folder as FolderIcon, Inbox, Send, Trash2, Archive, FileText, PenSquare, ShieldCheck, Settings, RefreshCw, AlertOctagon } from 'lucide-react';
 
 interface Props {
   onOpenCompose: () => void;
   onOpenSettings: () => void;
   onRefreshWorkspaces: () => void;
+  onSync?: () => void;
+  isSyncing?: boolean;
 }
 
-export const FolderTree: React.FC<Props> = ({ onOpenCompose, onOpenSettings, onRefreshWorkspaces }) => {
+export const FolderTree: React.FC<Props> = ({ onOpenCompose, onOpenSettings, onRefreshWorkspaces, onSync, isSyncing }) => {
   const { folders, activeFolderId, setActiveFolder, workspaces, activeWorkspaceId, setActiveWorkspace } = useWorkspaceStore();
   const currentWs = workspaces.find((w) => w.workspace_id === activeWorkspaceId);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const getFolderIcon = (name: string, isSelected: boolean) => {
-    const lower = name.toLowerCase();
+  const getFolderIcon = (name?: string, isSelected?: boolean) => {
+    const lower = (name || '').toLowerCase();
     const colorClass = isSelected ? 'text-amber-800' : 'text-slate-500';
     if (lower.includes('inbox') || lower.includes('arriv')) return <Inbox className={`w-4 h-4 ${colorClass}`} />;
     if (lower.includes('sent') || lower.includes('inviat')) return <Send className={`w-4 h-4 ${colorClass}`} />;
     if (lower.includes('trash') || lower.includes('cestin')) return <Trash2 className={`w-4 h-4 ${colorClass}`} />;
     if (lower.includes('draft') || lower.includes('bozz')) return <FileText className={`w-4 h-4 ${colorClass}`} />;
     if (lower.includes('archiv')) return <Archive className={`w-4 h-4 ${colorClass}`} />;
+    if (lower.includes('junk') || lower.includes('spam') || lower.includes('indesiderat')) return <AlertOctagon className={`w-4 h-4 ${colorClass}`} />;
     return <FolderIcon className={`w-4 h-4 ${colorClass}`} />;
   };
 
@@ -45,54 +48,82 @@ export const FolderTree: React.FC<Props> = ({ onOpenCompose, onOpenSettings, onR
 
   return (
     <div className="w-64 bg-slate-50/90 border-r border-slate-200/80 flex flex-col h-full select-none">
-      {/* Intestazione Account Attivo */}
+      {/* Intestazione Account Attivo o Vista Unificata */}
       <div className="p-3.5 border-b border-slate-200/60 bg-white/70">
-        <div className="flex items-center justify-between">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Casella Attiva</div>
-          {currentWs && (
-            <div className="flex items-center space-x-1">
-              <button
-                onClick={onOpenSettings}
-                title="Impostazioni casella"
-                className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
-              >
-                <Settings className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={handleDeleteCurrentWorkspace}
-                disabled={isDeleting}
-                title="Elimina questa casella"
-                className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+        {activeWorkspaceId === 'UNIFIED' ? (
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Vista Globale</div>
+              <span className="text-[10px] font-bold bg-amber-500/15 text-amber-900 px-2 py-0.5 rounded-full border border-amber-500/30">
+                {workspaces.length} Caselle
+              </span>
             </div>
-          )}
-        </div>
-        <div className="text-xs font-semibold text-slate-900 truncate mt-0.5" title={currentWs?.email_address || currentWs?.name}>
-          {currentWs ? (currentWs.name || currentWs.email_address) : 'Nessuna Casella Selezionata'}
-        </div>
-        {currentWs?.is_pec ? (
-          <div className="inline-flex items-center space-x-1 mt-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-full">
-            <ShieldCheck className="w-3 h-3 text-amber-600" />
-            <span>Posta Certificata</span>
+            <div className="text-xs font-bold text-slate-900 truncate mt-1">
+              Tutte le Caselle (Posta Unificata)
+            </div>
+            <div className="text-[11px] text-slate-400 truncate mt-0.5">
+              Visione complessiva aggregata
+            </div>
           </div>
-        ) : currentWs && (
-          <div className="text-[11px] text-slate-400 truncate mt-0.5">
-            {currentWs.email_address}
+        ) : (
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Casella Attiva</div>
+              {currentWs && (
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={onOpenSettings}
+                    title="Impostazioni casella"
+                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={handleDeleteCurrentWorkspace}
+                    disabled={isDeleting}
+                    title="Elimina questa casella"
+                    className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="text-xs font-semibold text-slate-900 truncate mt-0.5" title={currentWs?.email_address || currentWs?.name}>
+              {currentWs ? (currentWs.name || currentWs.email_address) : 'Nessuna Casella Selezionata'}
+            </div>
+            {currentWs?.is_pec ? (
+              <div className="inline-flex items-center space-x-1 mt-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-full">
+                <ShieldCheck className="w-3 h-3 text-amber-600" />
+                <span>Posta Certificata</span>
+              </div>
+            ) : currentWs && (
+              <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                {currentWs.email_address}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Tasto Azione Scrivi / Nuovo Messaggio */}
-      <div className="p-3 border-b border-slate-200/50">
+      {/* Tasto Azione Scrivi / Nuovo Messaggio e Sincronizza */}
+      <div className="p-3 border-b border-slate-200/50 space-y-2">
         <button
           onClick={onOpenCompose}
           disabled={!activeWorkspaceId}
-          className="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-xs"
+          className="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-xs cursor-pointer"
         >
           <PenSquare className="w-4 h-4 text-slate-950" />
           <span>{currentWs?.is_pec ? 'Scrivi Nuova PEC' : 'Scrivi Messaggio'}</span>
+        </button>
+
+        <button
+          onClick={onSync}
+          disabled={!activeWorkspaceId || isSyncing}
+          className="w-full py-2 px-3 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-800 font-semibold border border-slate-200 rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-xs cursor-pointer"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-600' : 'text-slate-600'}`} />
+          <span>{isSyncing ? 'Sincronizzazione in corso...' : 'Sincronizza Posta'}</span>
         </button>
       </div>
 

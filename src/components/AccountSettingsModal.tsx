@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { Settings, ShieldCheck, Mail, Lock, Server, X, AlertCircle, CheckCircle2, Trash2, Send, Activity, RefreshCw } from 'lucide-react';
+import { Settings, ShieldCheck, Mail, Lock, Server, X, AlertCircle, CheckCircle2, Trash2, Send, Activity, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { ConnectionReportModal, ConnectionTestReport } from './ConnectionReportModal';
 
 interface Props {
   isOpen: boolean;
@@ -32,14 +33,14 @@ export const AccountSettingsModal: React.FC<Props> = ({
   const [smtpUsername, setSmtpUsername] = useState('');
   const [isPec, setIsPec] = useState(false);
   const [autoDeleteOnServer, setAutoDeleteOnServer] = useState(false);
+  const [hasSavedPassword, setHasSavedPassword] = useState<boolean | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    incoming: { success: boolean; message: string };
-    outgoing: { success: boolean; message: string };
-    logs: Array<{ timestamp: string; section: string; level: string; text: string }>;
-  } | null>(null);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<ConnectionTestReport | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -47,7 +48,27 @@ export const AccountSettingsModal: React.FC<Props> = ({
     if (currentWs) {
       setName(currentWs.name || '');
       setEmailAddress(currentWs.email_address || '');
-      setPassword('');
+      setShowPassword(false);
+
+      if (currentWs.email_address) {
+        invoke('get_account_password', { email: currentWs.email_address })
+          .then((pwd: any) => {
+            if (pwd && typeof pwd === 'string' && pwd.trim().length > 0) {
+              setPassword(pwd);
+              setHasSavedPassword(true);
+            } else {
+              setPassword('');
+              setHasSavedPassword(false);
+            }
+          })
+          .catch(() => {
+            setPassword('');
+            setHasSavedPassword(false);
+          });
+      } else {
+        setPassword('');
+        setHasSavedPassword(false);
+      }
       const proto = (currentWs.incoming_protocol as any) || (currentWs.imap_port === 995 || currentWs.imap_port === 110 ? 'POP3' : 'IMAP');
       setIncomingProtocol(proto);
       setImapServer(currentWs.imap_server || (currentWs.email_address ? `mail.${currentWs.email_address.split('@')[1]}` : ''));
@@ -68,8 +89,10 @@ export const AccountSettingsModal: React.FC<Props> = ({
   if (!isOpen || !currentWs) return null;
 
   const handleTestConnection = async () => {
+    setIsReportOpen(true);
     setIsTesting(true);
     setTestResult(null);
+    setReportError(null);
     setErrorMsg(null);
 
     const activeIncomingServer = incomingProtocol === 'POP3' 
@@ -94,7 +117,9 @@ export const AccountSettingsModal: React.FC<Props> = ({
       });
       setTestResult(res);
     } catch (err: any) {
-      setErrorMsg(typeof err === 'string' ? err : err?.message || 'Errore durante il test di connessione.');
+      const msg = typeof err === 'string' ? err : err?.message || 'Errore durante il test di connessione.';
+      setReportError(msg);
+      setErrorMsg(msg);
     } finally {
       setIsTesting(false);
     }
@@ -209,23 +234,50 @@ export const AccountSettingsModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Password (aggiornamento facoltativo) */}
+          {/* Password (aggiornamento o inserimento) */}
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Nuova Password (lascia vuoto per non modificare)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                Password Casella
+              </label>
+              {hasSavedPassword === true ? (
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full flex items-center space-x-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>Password salvata nel Portachiavi</span>
+                </span>
+              ) : hasSavedPassword === false ? (
+                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full flex items-center space-x-1 animate-pulse">
+                  <AlertCircle className="w-3 h-3 text-rose-600" />
+                  <span>Nessuna password salvata: digitala qui</span>
+                </span>
+              ) : null}
+            </div>
             <div className="relative">
               <Lock className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
               <input
-                type="password"
-                placeholder="••••••••••••"
+                type={showPassword ? 'text' : 'password'}
+                placeholder={hasSavedPassword ? "Lascia vuoto per non modificare, oppure digita una nuova password..." : "Digita qui la password della casella..."}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-slate-900 placeholder:text-slate-400"
+                className={`w-full pl-9 pr-9 py-2 text-xs rounded-xl border focus:outline-hidden focus:ring-2 transition-all text-slate-900 ${
+                  !hasSavedPassword && !password
+                    ? 'border-rose-300 bg-rose-50/20 focus:border-rose-500 focus:ring-rose-400/30'
+                    : 'border-slate-300 focus:border-amber-500 focus:ring-amber-500/40'
+                }`}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                title={showPassword ? "Nascondi password" : "Mostra password"}
+              >
+                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
             </div>
             <p className="text-[10px] text-slate-400 mt-1">
-              La password è memorizzata in sicurezza nel Portachiavi di sistema (macOS Keychain).
+              {hasSavedPassword
+                ? "La password attuale è memorizzata in sicurezza nel Portachiavi macOS. Se la cambi, verrà aggiornata automaticamente."
+                : "Importante: inserisci la password e clicca su 'Salva Impostazioni' per abilitare invio e ricezione."}
             </p>
           </div>
 
@@ -562,6 +614,21 @@ export const AccountSettingsModal: React.FC<Props> = ({
           </div>
         </form>
       </div>
+
+      {/* Modale Report Connessione & Diagnostica di Rete */}
+      <ConnectionReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        isTesting={isTesting}
+        report={testResult}
+        error={reportError}
+        incomingProtocol={incomingProtocol}
+        incomingHost={incomingProtocol === 'POP3' ? (pop3Server.trim() || 'mail.apconsulting.it') : (imapServer.trim() || 'mail.apconsulting.it')}
+        incomingPort={incomingProtocol === 'POP3' ? Number(pop3Port) : Number(imapPort)}
+        outgoingHost={smtpServer.trim() || 'mail.apconsulting.it'}
+        outgoingPort={Number(smtpPort)}
+        onRetry={handleTestConnection}
+      />
     </div>
   );
 };

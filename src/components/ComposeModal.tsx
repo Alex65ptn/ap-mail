@@ -7,9 +7,15 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialData?: {
+    to?: string;
+    subject?: string;
+    body?: string;
+    draftId?: number;
+  } | null;
 }
 
-export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => {
+export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, initialData }) => {
   const { workspaces, activeWorkspaceId, triggerRefresh } = useWorkspaceStore();
   const currentWs = workspaces.find((w) => w.workspace_id === activeWorkspaceId);
 
@@ -19,32 +25,44 @@ export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
   const [isSending, setIsSending] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [authPassword, setAuthPassword] = useState('');
+  const [showAuthInput, setShowAuthInput] = useState(false);
   const [lastAutoSavedTime, setLastAutoSavedTime] = useState<string | null>(null);
   const [draftSavedToast, setDraftSavedToast] = useState(false);
 
   // Chiave storage univoca per la casella attiva
   const draftStorageKey = activeWorkspaceId ? `ap_mail_draft_${activeWorkspaceId}` : null;
 
-  // 1. Ripristina la bozza non appena si apre la modale
+  // 1. Ripristina i dati iniziali (se Rispondi / Inoltra / Reinvia) oppure la bozza locale
   useEffect(() => {
-    if (isOpen && draftStorageKey) {
-      try {
-        const saved = localStorage.getItem(draftStorageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.to) setTo(parsed.to);
-          if (parsed.subject) setSubject(parsed.subject);
-          if (parsed.body) setBody(parsed.body);
-          if (parsed.timestamp) {
-            const d = new Date(parsed.timestamp);
-            setLastAutoSavedTime(`${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`);
+    if (isOpen) {
+      if (initialData) {
+        setTo(initialData.to || '');
+        setSubject(initialData.subject || '');
+        setBody(initialData.body || '');
+        setErrorMsg(null);
+        return;
+      }
+
+      if (draftStorageKey) {
+        try {
+          const saved = localStorage.getItem(draftStorageKey);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.to) setTo(parsed.to);
+            if (parsed.subject) setSubject(parsed.subject);
+            if (parsed.body) setBody(parsed.body);
+            if (parsed.timestamp) {
+              const d = new Date(parsed.timestamp);
+              setLastAutoSavedTime(`${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`);
+            }
           }
+        } catch (e) {
+          console.error('Errore ripristino bozza:', e);
         }
-      } catch (e) {
-        console.error('Errore ripristino bozza:', e);
       }
     }
-  }, [isOpen, draftStorageKey]);
+  }, [isOpen, initialData, draftStorageKey]);
 
   // 2. Salvataggio automatico continuo in locale ad ogni digitazione
   useEffect(() => {
@@ -109,8 +127,8 @@ export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
   };
 
   // 4. Invio messaggio
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSend = async (e?: React.FormEvent, explicitPassword?: string) => {
+    if (e) e.preventDefault();
     if (!activeWorkspaceId) {
       setErrorMsg('Nessuna casella attiva selezionata.');
       return;
@@ -130,6 +148,8 @@ export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
           to: to.trim(),
           subject: subject.trim() || '(Nessun oggetto)',
           body: body.trim(),
+          password: explicitPassword || (authPassword.trim() ? authPassword.trim() : null),
+          draft_message_id: initialData?.draftId || null,
         },
       });
 
@@ -140,11 +160,17 @@ export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
       setTo('');
       setSubject('');
       setBody('');
+      setAuthPassword('');
+      setShowAuthInput(false);
       triggerRefresh();
       onSuccess();
       onClose();
     } catch (err: any) {
-      setErrorMsg(typeof err === 'string' ? err : err?.message || 'Errore durante l\'invio del messaggio.');
+      const msg = typeof err === 'string' ? err : err?.message || 'Errore durante l\'invio del messaggio.';
+      setErrorMsg(msg);
+      if (msg.includes('535') || msg.toLowerCase().includes('autenticazione') || msg.toLowerCase().includes('password') || msg.toLowerCase().includes('portachiavi')) {
+        setShowAuthInput(true);
+      }
     } finally {
       setIsSending(false);
     }
@@ -186,9 +212,39 @@ export const ComposeModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
         {/* Form Invio */}
         <form onSubmit={handleSend} className="p-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
           {errorMsg && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center space-x-2 leading-relaxed">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-              <span>{errorMsg}</span>
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs space-y-2.5 leading-relaxed">
+              <div className="flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                <span className="flex-1">{errorMsg}</span>
+              </div>
+
+              {showAuthInput && (
+                <div className="pt-2.5 border-t border-rose-200/90 bg-white/80 p-3 rounded-lg space-y-2">
+                  <div className="font-bold text-slate-800 text-[11px]">
+                    Digita qui la password per {currentWs?.email_address || 'questa casella'}:
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="Inserisci password casella..."
+                      className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSend(undefined, authPassword)}
+                      disabled={isSending || !authPassword.trim()}
+                      className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer"
+                    >
+                      {isSending ? 'Invio in corso...' : 'Salva & Invia Ora'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Verrà salvata in modo permanente nel Portachiavi di sistema per i futuri invii.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

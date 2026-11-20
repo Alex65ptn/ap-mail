@@ -4,3 +4,6 @@ dist-ssr
 *.local
 src-tauri/target
 .DS_Store
+*.dmg
+target_linux_packages/
+AP_Mail_Data/
