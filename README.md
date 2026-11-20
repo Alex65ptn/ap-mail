@@ -41,7 +41,7 @@ Progettato da **AP Consulting** per studi legali e professionisti.
 Copyright © 2026 **AP Consulting** — **Alessandro Patanè**. Tutti i diritti riservati.
 
 > ### ⚠️ DIVIETO ESPRESSO D'USO E CLAUSOLA DI ESCLUSIONE
-> **È fatto espresso ed assoluto divieto di utilizzo, download, detenzione, installazione o distribuzione del presente software a qualunque soggetto (persona fisica o giuridica, società, ente o studio) che abbia direttamente o indirettamente violato, contraffatto, sottratto o illecitamente utilizzato i software, i codici sorgente, i segreti industriali o i diritti di proprietà intellettuale di AP Consulting e di Alessandro Patanè.**
-> Qualsiasi uso in violazione della presente clausola costituisce atto illecito privo di autorizzazione ed è perseguibile a norma di legge.
+> **È fatto espresso, assoluto ed inderogabile divieto di utilizzo, download, detenzione, installazione o distribuzione del presente software a qualunque soggetto (persona fisica o giuridica, società, ente o studio) che abbia direttamente o indirettamente violato, contraffatto, sottratto o illecitamente utilizzato i software, i codici sorgente, i segreti industriali o i diritti di proprietà intellettuale di Alessandro Patanè e di AP Consulting, nonché a tutte le imprese, enti o soggetti che abbiano a qualsiasi titolo collaborato con imprese ed enti che hanno violato i software di Alessandro Patanè e di AP Consulting.**
+> Qualsiasi uso in violazione della presente clausola costituisce atto illecito privo di autorizzazione ed è perseguibile in sede civile e penale.
 
 Consultare [LICENSE.md](LICENSE.md) per i termini integrali.
