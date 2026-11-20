@@ -1102,13 +1102,13 @@ pub async fn list_folders(state: State<'_, AppState>, workspace_id: String) -> R
         let vaults = state.get_all_vaults();
         let mut inbox_unread = 0;
         let mut inbox_total = 0;
-        let mut sent_unread = 0;
+        let sent_unread = 0;
         let mut sent_total = 0;
-        let mut drafts_unread = 0;
+        let drafts_unread = 0;
         let mut drafts_total = 0;
-        let mut trash_unread = 0;
+        let trash_unread = 0;
         let mut trash_total = 0;
-        let mut archive_unread = 0;
+        let archive_unread = 0;
         let mut archive_total = 0;
         let mut junk_unread = 0;
         let mut junk_total = 0;
@@ -2190,6 +2190,7 @@ pub async fn open_message_in_new_window(
     let url_str = format!("index.html?window=detached-message&ws={}&msg={}", workspace_id, message_id);
     let url = WebviewUrl::App(url_str.into());
 
+    #[allow(unused_mut)]
     let mut builder = WebviewWindowBuilder::new(&app, &label, url)
         .title(&title)
         .inner_size(1000.0, 750.0)
@@ -2281,6 +2282,18 @@ pub async fn open_message_in_apple_mail(
             .arg(&target_file)
             .spawn();
     }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &target_file.to_string_lossy()])
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&target_file)
+            .spawn();
+    }
 
     Ok(target_file.to_string_lossy().to_string())
 }
@@ -2362,6 +2375,18 @@ pub async fn export_message_eml(
         let _ = std::process::Command::new("open")
             .arg("-R")
             .arg(&file_path)
+            .spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer")
+            .arg(format!("/select,{}", file_path.to_string_lossy()))
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&dest_dir)
             .spawn();
     }
 
@@ -2464,6 +2489,18 @@ pub async fn open_or_export_attachment(
             .arg(&target_file)
             .spawn();
     }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &target_file.to_string_lossy()])
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&target_file)
+            .spawn();
+    }
 
     Ok(true)
 }
@@ -2506,6 +2543,18 @@ pub async fn reveal_vault_in_finder(state: State<'_, AppState>) -> Result<()> {
             .arg(&root)
             .spawn();
     }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer")
+            .arg(&root)
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&root)
+            .spawn();
+    }
     Ok(())
 }
 
@@ -2521,7 +2570,7 @@ pub struct DiscoveredMailbox {
 
 #[tauri::command]
 pub async fn scan_for_importable_mailboxes() -> Result<Vec<DiscoveredMailbox>> {
-    let mut discovered = Vec::new();
+    let mut discovered: Vec<DiscoveredMailbox> = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
     #[cfg(target_os = "macos")]
@@ -2583,6 +2632,44 @@ pub async fn scan_for_importable_mailboxes() -> Result<Vec<DiscoveredMailbox>> {
                             size_human: format_size_human(sz),
                             category: cat.into(),
                         });
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut candidate_dirs = Vec::new();
+        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+            candidate_dirs.push(std::path::PathBuf::from(local_appdata).join("Microsoft").join("Outlook"));
+        }
+        if let Ok(user_profile) = std::env::var("USERPROFILE") {
+            candidate_dirs.push(std::path::PathBuf::from(user_profile).join("Documents").join("Outlook Files"));
+        }
+        for dir in candidate_dirs {
+            if dir.exists() {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                        if ext == "pst" || ext == "ost" {
+                            let p_str = path.to_string_lossy().to_string();
+                            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("Mailbox").to_string();
+                            if let Ok(meta) = path.metadata() {
+                                let sz = meta.len();
+                                if seen.insert(p_str.clone()) {
+                                    discovered.push(DiscoveredMailbox {
+                                        name: file_name,
+                                        path: p_str,
+                                        format: if ext == "pst" { "PST".into() } else { "OST".into() },
+                                        size_bytes: sz,
+                                        size_human: format_size_human(sz),
+                                        category: "Archivio Outlook".into(),
+                                    });
+                                }
+                            }
+                        }
                     }
                 }
             }

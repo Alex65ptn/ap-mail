@@ -42,7 +42,6 @@ thiserror = "2.0"
 # IMAP & TLS
 tokio-rustls = "0.26"
 rustls-native-certs = "0.8"
-futures = "0.3"
 
 # Mail & PEC
 mail-parser = "0.11"
