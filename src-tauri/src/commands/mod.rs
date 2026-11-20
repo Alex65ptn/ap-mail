@@ -2571,7 +2571,7 @@ pub struct DiscoveredMailbox {
 #[tauri::command]
 pub async fn scan_for_importable_mailboxes() -> Result<Vec<DiscoveredMailbox>> {
     let mut discovered: Vec<DiscoveredMailbox> = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     #[cfg(target_os = "macos")]
     {
@@ -2667,6 +2667,46 @@ pub async fn scan_for_importable_mailboxes() -> Result<Vec<DiscoveredMailbox>> {
                                         size_human: format_size_human(sz),
                                         category: "Archivio Outlook".into(),
                                     });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let tb_dir = std::path::PathBuf::from(home).join(".thunderbird");
+            if tb_dir.exists() {
+                if let Ok(entries) = std::fs::read_dir(&tb_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            let mail_dir = path.join("Mail");
+                            if mail_dir.exists() {
+                                if let Ok(m_entries) = std::fs::read_dir(mail_dir) {
+                                    for me in m_entries.flatten() {
+                                        let p = me.path();
+                                        if let Ok(meta) = p.metadata() {
+                                            if meta.is_file() && meta.len() > 100 {
+                                                let p_str = p.to_string_lossy().to_string();
+                                                let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("Mailbox").to_string();
+                                                if seen.insert(p_str.clone()) {
+                                                    discovered.push(DiscoveredMailbox {
+                                                        name: file_name,
+                                                        path: p_str,
+                                                        format: "MBOX".into(),
+                                                        size_bytes: meta.len(),
+                                                        size_human: format_size_human(meta.len()),
+                                                        category: "Thunderbird Linux".into(),
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
