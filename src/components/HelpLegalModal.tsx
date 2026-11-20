@@ -329,11 +329,22 @@ Impronta Crittografica (SHA-256): [INSERIRE HASH GENERATO DA AP MAIL]`;
                   <span>Diritti di Proprietà Intellettuale & Copyright</span>
                 </h3>
                 <p className="text-slate-700 leading-relaxed mb-3">
-                  <strong>AP Mail</strong> è un software proprietario ideato, progettato e sviluppato da <strong>AP Consulting</strong> sotto la direzione e paternità intellettuale di <strong>Alessandro Patanè</strong>.
+                  <strong>AP Mail</strong> è un software proprietario ideato, progettato e sviluppato da <strong>AP Consulting</strong> sotto la direzione e paternità intellettuale esclusiva di <strong>Alessandro Patanè</strong>.
                 </p>
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono text-[11px] text-slate-700">
                   © 2026 AP Consulting — Alessandro Patanè. Tutti i diritti riservati.<br />
-                  Ogni riproduzione, decompilazione o distribuzione non autorizzata è vietata ai sensi della Legge 22 aprile 1941, n. 633 sul diritto d'autore e delle normative comunitarie vigenti.
+                  Ogni riproduzione, decompilazione, reverse-engineering o distribuzione non autorizzata è vietata ai sensi della Legge 22 aprile 1941, n. 633 sul diritto d'autore e delle normative comunitarie vigenti.
+                </div>
+
+                {/* Clausola di Esclusione d'Uso per violazione software AP Consulting */}
+                <div className="mt-3.5 bg-rose-50 border border-rose-200/90 rounded-xl p-3.5 text-rose-950 text-xs">
+                  <div className="font-bold text-rose-900 flex items-center space-x-1.5 mb-1">
+                    <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                    <span>DIVIETO ESPRESSO D'USO E CONDIZIONE DI LICENZA</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-rose-900/90">
+                    È fatto <strong>espresso e assoluto divieto di utilizzo, detenzione, download, installazione o consultazione</strong> del presente software, in qualsiasi forma o ambiente, a qualunque persona fisica o giuridica, società, ente o studio che abbia direttamente o indirettamente violato, contraffatto, sottratto o illecitamente utilizzato i software, i codici sorgente, i segreti industriali o i diritti di proprietà intellettuale di <strong>AP Consulting</strong> e di <strong>Alessandro Patanè</strong>. Qualsiasi violazione comporta responsabilità civile e penale con richiesta di risarcimento del danno in tutte le competenti sedi giudiziarie.
+                  </p>
                 </div>
               </div>
 

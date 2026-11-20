@@ -36,7 +36,12 @@ Progettato da **AP Consulting** per studi legali e professionisti.
 
 ---
 
-## Compilazione Multi-Piattaforma (Windows .msi / .exe, Linux .deb / .AppImage, macOS .dmg)
+## Licenza, Proprietà Intellettuale & Condizioni d'Uso
 
-Il repository include il workflow GitHub Actions pronto in `.github/workflows/release.yml`.
-Basta pubblicare il repository su GitHub e creare un tag di release (es. `v1.0.0`): GitHub Actions avvierà automaticamente tre macchine cloud (macOS, Windows e Ubuntu) compilando e pubblicando tutti e 3 i pacchetti d'installazione.
+Copyright © 2026 **AP Consulting** — **Alessandro Patanè**. Tutti i diritti riservati.
+
+> ### ⚠️ DIVIETO ESPRESSO D'USO E CLAUSOLA DI ESCLUSIONE
+> **È fatto espresso ed assoluto divieto di utilizzo, download, detenzione, installazione o distribuzione del presente software a qualunque soggetto (persona fisica o giuridica, società, ente o studio) che abbia direttamente o indirettamente violato, contraffatto, sottratto o illecitamente utilizzato i software, i codici sorgente, i segreti industriali o i diritti di proprietà intellettuale di AP Consulting e di Alessandro Patanè.**
+> Qualsiasi uso in violazione della presente clausola costituisce atto illecito privo di autorizzazione ed è perseguibile a norma di legge.
+
+Consultare [LICENSE.md](LICENSE.md) per i termini integrali.
