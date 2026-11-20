@@ -4,6 +4,18 @@ Software ideato e sviluppato da **Alessandro Patanè** sotto il marchio **AP Con
 
 ![Logo AP Consulting](public/logo.png)
 
+---
+
+## 📥 DOWNLOAD INSTALLATORI COMPILATI UFFICIALI (v1.0.0)
+
+| Piattaforma | Pacchetto Compilato | Dimensione | Download Diretto |
+| :--- | :--- | :--- | :--- |
+| 🪟 **Windows** | `AP.Mail_1.0.0_x64-setup.exe` | 4.91 MB | [Scarica Installer Windows (.exe)](https://github.com/Alex65ptn/ap-mail/releases/download/v1.0.0/AP.Mail_1.0.0_x64-setup.exe) |
+| 🐧 **Linux** | `AP.Mail_1.0.0_amd64.deb` | 7.67 MB | [Scarica Pacchetto Linux (.deb)](https://github.com/Alex65ptn/ap-mail/releases/download/v1.0.0/AP.Mail_1.0.0_amd64.deb) |
+| 🍎 **macOS** | `AP.Mail_1.0.0_aarch64.dmg` | 6.17 MB | [Scarica Immagine Disco macOS (.dmg)](https://github.com/Alex65ptn/ap-mail/releases/download/v1.0.0/AP.Mail_1.0.0_aarch64.dmg) |
+
+---
+
 ## Caratteristiche Principali
 - **Architettura a Contenitori (Vaults):** Nessuna casella unificata. Ogni account e archivio storico risiede in un contenitore isolato portabile (`manifest.json`, `index.db`, `/blobs`).
 - **Verifica e Integrità PEC:** Download integrale, calcolo SHA-256 e commit prima dell'eliminazione dal server (`EXPUNGE` protetto). Correlazione automatica delle ricevute tramite `<identificativo>` di `daticert.xml`.
