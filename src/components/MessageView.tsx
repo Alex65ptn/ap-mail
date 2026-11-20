@@ -2,16 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { AttachmentItem } from '../types/mail';
-import { ShieldCheck, Download, FileCheck2, FileCode, Reply, Forward, RotateCcw, Printer, CalendarPlus, ExternalLink, Scale, Mail, MailOpen, Sparkles } from 'lucide-react';
+import { ShieldCheck, Download, FileCheck2, FileCode, Reply, Forward, RotateCcw, Printer, CalendarPlus, ExternalLink, Scale, Mail, MailOpen } from 'lucide-react';
 import { LegalEmlExportModal, EmlExportData } from './LegalEmlExportModal';
 
 interface Props {
   onComposeAction?: (data: { to?: string; subject?: string; body?: string; draftId?: number }) => void;
   onAddToCalendar?: (message: any) => void;
-  onOpenLegalSuitePlus?: (data?: { subject?: string; body?: string }) => void;
 }
 
-export const MessageView: React.FC<Props> = ({ onComposeAction, onAddToCalendar, onOpenLegalSuitePlus }) => {
+export const MessageView: React.FC<Props> = ({ onComposeAction, onAddToCalendar }) => {
   const { activeWorkspaceId, selectedMessage, setSelectedMessage } = useWorkspaceStore();
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [bodyText, setBodyText] = useState<string>('');
@@ -192,24 +191,12 @@ export const MessageView: React.FC<Props> = ({ onComposeAction, onAddToCalendar,
               <span>Apri Fuori dal Client</span>
             </button>
 
-            {/* Tasto AP Suite PLUS (AI Forense, Termini Cartabia, Interessi & Parcelle) */}
-            {onOpenLegalSuitePlus && (
-              <button
-                onClick={() => onOpenLegalSuitePlus({ subject: selectedMessage.subject, body: bodyText })}
-                title="✦ AP Suite PLUS: Analisi Forense AI offline, Scadenze Cartabia, Interessi Legali e Parcelle"
-                className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer group"
-              >
-                <Sparkles className="w-3.5 h-3.5 transition-transform group-hover:rotate-12" />
-                <span>✦ Suite PLUS</span>
-              </button>
-            )}
-
             {/* Tasto Salva .EML per Deposito Telematico PCT */}
             <button
               onClick={handleExportEml}
               disabled={isExporting}
               title="Salva file .EML nativo con impronta SHA-256 e attestazione per deposito telematico (PCT/PAT)"
-              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-lg text-xs flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+              className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
             >
               <Scale className="w-3.5 h-3.5" />
               <span>{isExporting ? 'Esportazione...' : 'Salva .EML per Deposito'}</span>

@@ -1,6 +1,6 @@
 [package]
 name = "ap-mail-desktop"
-version = "1.1.0"
+version = "1.0.0"
 description = "AP Mail - High-performance Desktop Email & PEC Client"
 authors = ["AP Consulting"]
 edition = "2021"

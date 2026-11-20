@@ -17,7 +17,6 @@ import { CalendarEvent } from './types/calendar';
 import { RefreshCw, PenSquare } from 'lucide-react';
 import { DetachedMessageWindow } from './components/DetachedMessageWindow';
 import { HelpLegalModal } from './components/HelpLegalModal';
-import { LegalSuitePlusModal } from './components/LegalSuitePlusModal';
 
 export const App: React.FC = () => {
   const urlParams = new URLSearchParams(window.location.search);
@@ -36,8 +35,6 @@ export const App: React.FC = () => {
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-  const [isLegalSuiteModalOpen, setIsLegalSuiteModalOpen] = useState(false);
-  const [legalSuitePreset, setLegalSuitePreset] = useState<{ subject?: string; body?: string } | null>(null);
   const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
   const [composeInitialData, setComposeInitialData] = useState<{ to?: string; subject?: string; body?: string; draftId?: number } | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -166,10 +163,6 @@ export const App: React.FC = () => {
         onOpenAddAccountModal={() => setIsAddAccountModalOpen(true)}
         onOpenStorageModal={() => setIsStorageModalOpen(true)}
         onOpenHelpModal={() => setIsHelpModalOpen(true)}
-        onOpenLegalSuitePlus={() => {
-          setLegalSuitePreset(null);
-          setIsLegalSuiteModalOpen(true);
-        }}
       />
 
       {/* Render Condizionale: Posta vs Calendario Outlook */}
@@ -241,10 +234,6 @@ export const App: React.FC = () => {
                 <MessageView 
                   onComposeAction={handleOpenCompose} 
                   onAddToCalendar={handleAddToCalendarFromEmail}
-                  onOpenLegalSuitePlus={(data) => {
-                    setLegalSuitePreset(data || null);
-                    setIsLegalSuiteModalOpen(true);
-                  }}
                 />
               </div>
             </div>
@@ -326,25 +315,6 @@ export const App: React.FC = () => {
       <HelpLegalModal
         isOpen={isHelpModalOpen}
         onClose={() => setIsHelpModalOpen(false)}
-      />
-
-      {/* Modale AP Suite PLUS (Legal & Financial Suite Forense) */}
-      <LegalSuitePlusModal
-        isOpen={isLegalSuiteModalOpen}
-        onClose={() => {
-          setIsLegalSuiteModalOpen(false);
-          setLegalSuitePreset(null);
-        }}
-        presetSubject={legalSuitePreset?.subject}
-        presetText={legalSuitePreset?.body}
-        onOpenComposeWithDraft={(draftBody) => {
-          setIsLegalSuiteModalOpen(false);
-          handleOpenCompose({
-            to: '',
-            subject: legalSuitePreset?.subject ? `Riscontro: ${legalSuitePreset.subject}` : 'Riscontro legale',
-            body: draftBody,
-          });
-        }}
       />
     </div>
   );

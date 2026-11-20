@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { ShieldCheck, Mail, Archive, Plus, UserPlus, Layers, HardDrive, Calendar, HelpCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, Mail, Archive, Plus, UserPlus, Layers, HardDrive, Calendar, HelpCircle } from 'lucide-react';
 
 interface Props {
   activeTab: 'mail' | 'calendar';
@@ -9,7 +9,6 @@ interface Props {
   onOpenAddAccountModal: () => void;
   onOpenStorageModal?: () => void;
   onOpenHelpModal?: () => void;
-  onOpenLegalSuitePlus?: () => void;
 }
 
 export const WorkspaceSidebar: React.FC<Props> = ({
@@ -19,7 +18,6 @@ export const WorkspaceSidebar: React.FC<Props> = ({
   onOpenAddAccountModal,
   onOpenStorageModal,
   onOpenHelpModal,
-  onOpenLegalSuitePlus,
 }) => {
   const { workspaces, activeWorkspaceId, setActiveWorkspace } = useWorkspaceStore();
 
@@ -30,7 +28,7 @@ export const WorkspaceSidebar: React.FC<Props> = ({
         <img src="/logo.png" alt="AP Consulting" className="w-9 h-9 object-contain" />
       </div>
 
-      {/* Switcher Principale Stile Outlook: Posta vs Calendario vs AP Suite PLUS */}
+      {/* Switcher Principale Stile Outlook: Posta vs Calendario */}
       <div className="bg-slate-200/60 p-1 rounded-2xl flex flex-col items-center space-y-1 border border-slate-200/80">
         {/* Tasto Posta */}
         <button
@@ -58,17 +56,6 @@ export const WorkspaceSidebar: React.FC<Props> = ({
           <Calendar className="w-5 h-5 stroke-[2.2]" />
           <span className="absolute 1.5 top-1.5 right-1.5 w-2 h-2 bg-rose-600 rounded-full ring-2 ring-white" />
         </button>
-
-        {/* Tasto AP Suite PLUS (Calcoli Legali & AI) */}
-        {onOpenLegalSuitePlus && (
-          <button
-            onClick={onOpenLegalSuitePlus}
-            title="✦ AP Suite PLUS (Assistente Legale AI, Termini Cartabia, Interessi, Parcella D.M. 147/2022, C.U.)"
-            className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-bold flex items-center justify-center transition-all shadow-sm shadow-amber-500/30 hover:scale-105 cursor-pointer group"
-          >
-            <Sparkles className="w-5 h-5 stroke-[2.2] text-slate-950 transition-transform group-hover:rotate-12" />
-          </button>
-        )}
       </div>
 
       <div className="w-8 h-[1px] bg-slate-200/80" />

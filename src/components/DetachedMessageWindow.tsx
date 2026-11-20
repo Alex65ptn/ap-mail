@@ -15,11 +15,9 @@ import {
   Building2, 
   Download, 
   FileCheck2,
-  Folder,
-  Sparkles
+  Folder
 } from 'lucide-react';
 import { LegalEmlExportModal, EmlExportData } from './LegalEmlExportModal';
-import { LegalSuitePlusModal } from './LegalSuitePlusModal';
 
 interface Props {
   workspaceId: string;
@@ -34,7 +32,6 @@ export const DetachedMessageWindow: React.FC<Props> = ({ workspaceId, messageId 
   const [exportModalData, setExportModalData] = useState<EmlExportData | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isFlagged, setIsFlagged] = useState(false);
-  const [isLegalSuiteOpen, setIsLegalSuiteOpen] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -184,19 +181,10 @@ export const DetachedMessageWindow: React.FC<Props> = ({ workspaceId, messageId 
         {/* Gruppo Azioni Destra */}
         <div className="flex items-center space-x-1.5">
           <button
-            onClick={() => setIsLegalSuiteOpen(true)}
-            title="AP Suite PLUS: Analisi Forense AI, Termini Cartabia, Interessi e Parcelle"
-            className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-bold rounded-md text-[11px] flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer mr-1 group"
-          >
-            <Sparkles className="w-3.5 h-3.5 transition-transform group-hover:rotate-12" />
-            <span>✦ Suite PLUS</span>
-          </button>
-
-          <button
             onClick={handleExportEml}
             disabled={isExporting}
             title="Salva file .EML con impronta SHA-256 e conformità CAD per depositi telematici (PCT/PAT/PTT)"
-            className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold rounded-md text-[11px] flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer mr-1"
+            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-md text-[11px] flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer mr-1"
           >
             <Scale className="w-3.5 h-3.5" />
             <span>{isExporting ? 'Esportazione...' : 'Salva .EML Deposito'}</span>
@@ -363,14 +351,6 @@ export const DetachedMessageWindow: React.FC<Props> = ({ workspaceId, messageId 
         onClose={() => setExportModalData(null)}
         workspaceId={workspaceId}
         messageId={messageId}
-      />
-
-      {/* Modal AP Suite PLUS Forense */}
-      <LegalSuitePlusModal
-        isOpen={isLegalSuiteOpen}
-        onClose={() => setIsLegalSuiteOpen(false)}
-        presetSubject={subject}
-        presetText={details?.body_text || ''}
       />
     </div>
   );

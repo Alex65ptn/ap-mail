@@ -160,23 +160,6 @@ Impronta Crittografica (SHA-256): [INSERIRE HASH GENERATO DA AP MAIL]`;
 
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
                 <h3 className="font-bold text-slate-900 text-sm mb-2 flex items-center space-x-2">
-                  <Sparkles className="w-4 h-4 text-amber-600" />
-                  <span>AP Mail PLUS: Suite Legale, Finanziaria & AI Forense Offline</span>
-                </h3>
-                <p className="text-slate-600 mb-3">
-                  La versione <strong>AP Mail PLUS</strong> integra direttamente nella casella di posta tutti i principali calcolatori professionali (stile AvvocatoAndreani) e l'intelligenza artificiale per l'analisi forense:
-                </p>
-                <ul className="list-disc pl-5 space-y-1.5 text-slate-600">
-                  <li><strong>Assistente Legale AI Offline</strong>: rileva automaticamente natura dell'atto (Citazione, D.I., Ricorso, Note 127-ter, Memorie 171-ter, Comparsa 190), Autorità Giudiziaria, R.G., scadenze perentorie e sintetizza i 3 punti chiave, generando una bozza formale di riscontro con 0% dispersione dati su cloud (privacy totale GDPR).</li>
-                  <li><strong>Calcolo Termini Processuali (Riforma Cartabia)</strong>: calcolo a ritroso o in avanti dei termini con sospensione feriale (1-31 agosto) e proroga automatica ex art. 155 c.p.c., con inserimento immediato nello scadenzario con 1 clic.</li>
-                  <li><strong>Interessi Legali & Rivalutazione Monetaria</strong>: storico tassi MEF dal 1942 al 2026, con opzione anatocismo annuale ex art. 1283 c.c. e prospetto di calcolo esportabile.</li>
-                  <li><strong>Parcella Forense D.M. 147/2022</strong>: calcolo per scaglioni di valore (fino a &euro;520.000 e oltre), 4 fasi di giudizio, maggiorazione spese generali 15%, C.P.A. 4% e I.V.A. 22%.</li>
-                  <li><strong>Contributo Unificato D.P.R. 115/2002</strong>: tabella ministeriale aggiornata per procedimenti ordinari, lavoro e impugnazioni.</li>
-                </ul>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-                <h3 className="font-bold text-slate-900 text-sm mb-2 flex items-center space-x-2">
                   <Layers className="w-4 h-4 text-amber-600" />
                   <span>Interrogazione Istantanea FTS5 & Ordinamento</span>
                 </h3>
