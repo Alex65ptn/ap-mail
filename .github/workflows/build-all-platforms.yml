@@ -67,23 +67,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
-          releaseName: 'AP Mail PLUS v__VERSION__ - Client Email & PEC Forense'
+          releaseName: 'AP Mail v__VERSION__ - Client Email & PEC'
           releaseBody: |
-            ## AP Mail PLUS - Client Email & PEC Forense
+            ## AP Mail - Client Email & PEC
             **Prodotto di:** AP Consulting
             **Autore:** Alessandro Patanè
 
-            ### Novità di AP Mail PLUS:
-            - **AP Legal AI Assistant**: Analisi atti giudiziari e generazione bozze 100% offline e confidenziali
-            - **Termini Processuali Cartabia**: Calcolo a ritroso/in avanti con sospensione feriale e 1-click su Scadenzario
-            - **Interessi Legali MEF 1942-2026**: Calcolo scaglionato con opzione anatocismo
-            - **Parcella Forense D.M. 147/2022**: Calcolo compensi 4 fasi, spese 15%, C.P.A. 4% e I.V.A. 22%
-            - **Contributo Unificato D.P.R. 115/2002**: Tabelle ministeriali aggiornate
+            ### Caratteristiche Principali (Versione Base):
+            - **Layout Classico stile Apple Mail**: Tabella orizzontale a colonne (Stato, Mittente, Data ricezione precisa con ora e minuto, Oggetto, Dimensione) ed anteprima sottostante
+            - **Supporto PEC & Email ordinaria**: IMAP, POP3 e SMTP nativi
+            - **Ricerca Full-Text FTS5 Ultraveloce** su messaggi e allegati
+            - **Scadenzario e Calendario integrati**
+            - **100% Locale e Confidenziale**
 
             ### Pacchetti Disponibili al Download:
-            - **Windows**: `AP Mail_1.1.0_x64-setup.exe` (Installer NSIS per Windows 10/11)
-            - **Linux**: `ap-mail_1.1.0_amd64.deb` (Debian/Ubuntu/Mint) e `AP Mail_1.1.0_amd64.AppImage` (Universale Linux)
-            - **macOS**: `AP Mail_1.1.0_universal.dmg` (Apple Silicon & Intel)
+            - **Windows**: `AP Mail_1.0.0_x64-setup.exe` (Installer NSIS per Windows 10 e 11)
+            - **Linux**: `ap-mail_1.0.0_amd64.deb` (Debian/Ubuntu/Mint) e `AP Mail_1.0.0_amd64.AppImage` (Universale Linux)
+            - **macOS**: `AP Mail_1.0.0_universal.dmg` (Apple Silicon & Intel x86_64)
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
